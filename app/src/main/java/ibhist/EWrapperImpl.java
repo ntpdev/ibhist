@@ -168,7 +168,7 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void historicalData(int i, Bar bar) {
-//        log.info("historicalData " + i);
+        log.info("historicalData " + i);
         if (actions.get(i) instanceof HistoricalDataAction a) {
 //            log.info("found action in map");
             a.process(bar);
@@ -176,8 +176,8 @@ public class EWrapperImpl implements EWrapper {
     }
 
     @Override
-    public void historicalDataEnd(int i, String s, String s1) {
-//        log.info("historicalDataEnd " + i);
+    public void historicalDataEnd(int i, String start, String end) {
+        log.info("historicalDataEnd " + i + " " + start + " " + end);
         if (actions.get(i) instanceof HistoricalDataAction a) {
 //            log.info("found action in map");
             a.process();

@@ -23,7 +23,7 @@ public class App {
 
     private static Contract contract;
 
-    private static AtomicInteger id = new AtomicInteger(100);
+    private static final AtomicInteger id = new AtomicInteger(100);
 
     public String getGreeting() {
         return "Hello World!";
@@ -101,6 +101,9 @@ public class App {
         log.info("processHistoricalData " + bars.size());
         if (!bars.isEmpty()) {
             log.info(contract.localSymbol() + " bars from " + bars.get(0).time() + " to " + bars.get(bars.size() - 1).time());
+            var history = action.getPriceHistory();
+            var index = history.makeIndex();
+//            action.save();
         }
     }
 

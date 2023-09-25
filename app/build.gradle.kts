@@ -20,6 +20,8 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.3")
     // https://mvnrepository.com/artifact/org.assertj/assertj-core
     testImplementation("org.assertj:assertj-core:3.24.2")
+    // https://mvnrepository.com/artifact/org.mockito/mockito-core
+    testImplementation("org.mockito:mockito-core:5.5.0")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
