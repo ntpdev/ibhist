@@ -93,6 +93,29 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
+    // add vwap col
+    Column vwap(String output) {
+        var highs = getColumn("high");
+        var lows = getColumn("low");
+        var vols = getColumn("volume");
+        var c = new Column("vwap", length());
+        double cumVol = 0;
+        double totalVwap = 0;
+        var lastDt = dates[0];
+        for (int i = 0; i < length(); i++) {
+            if (ChronoUnit.MINUTES.between(lastDt, dates[i]) >= 30) {
+                cumVol = 0;
+                totalVwap = 0;
+            }
+            cumVol += vols[i];
+            totalVwap += vols[i] * (highs[i] + lows[i]) * .5d;
+            c.values[i] = totalVwap / cumVol;
+            lastDt = dates[i];
+        }
+        columns.add(c);
+        return c;
+    }
+
     public static class Column implements Serializable {
         final String name;
         final double[] values;
@@ -133,8 +156,11 @@ public class PriceHistory implements Serializable {
         public NavigableMap<Long, String> makeMessages(IndexEntry e) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
             for (IndexEntry idx : indexEntries) {
-                var b = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.start(), -1);
+                var b = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.start(), idx.end());
                 putMessage(priceMessages, b.open(), "%.2f glbx open");
+                putMessage(priceMessages, b.close(), "%.2f last");
+                var c = PriceHistory.this.getColumn("vwap");
+                putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
                 var glbx = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.start(), idx.euEnd());
                 putMessage(priceMessages, glbx.high(), "%.2f glbx hi");
@@ -150,7 +176,6 @@ public class PriceHistory implements Serializable {
                     putMessage(priceMessages, rth.open(), "%.2f open");
                     putMessage(priceMessages, rth.high(), "%.2f high");
                     putMessage(priceMessages, rth.low(), "%.2f low");
-                    putMessage(priceMessages, rth.close(), "%.2f last");
                     var rthFirstHour = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.rthStart(), idx.rthStart() + 59);
                     putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
                     putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");

@@ -17,6 +17,8 @@ class PriceHistoryRepositoryTest {
         var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esu3", ".csv");
         var history = repository.load(Path.of("c:\\temp\\ultra\\esz3"));
         assertThat(history.length()).isEqualTo(1346);
+        var c = history.vwap("vwap");
+        assertThat(c.values.length).isEqualTo(history.length());
         var index = history.makeIndex();
         assertThat(index.getIndexEntries()).hasSize(1);
     }

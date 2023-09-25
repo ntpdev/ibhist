@@ -102,6 +102,7 @@ public class App {
         if (!bars.isEmpty()) {
             log.info(contract.localSymbol() + " bars from " + bars.get(0).time() + " to " + bars.get(bars.size() - 1).time());
             var history = action.getPriceHistory();
+            var vwap = history.vwap("vwap");
             var index = history.makeIndex();
 //            action.save();
         }
