@@ -126,9 +126,41 @@ public class PriceHistory implements Serializable {
         }
     }
 
+    public Bar aggregrate(int start, int inclusiveEnd) {
+        int end = inclusiveEnd >= 0 ? Math.min(inclusiveEnd, length() - 1) : length() + inclusiveEnd;
+        if (start > end) {
+            throw new IllegalArgumentException("Invalid array bounds " + start + " " + inclusiveEnd);
+        }
+//        var dates = hist.getDates();
+        var opens = getColumn("open");
+        var highs = getColumn("high");
+        var lows = getColumn("low");
+        var closes = getColumn("close");
+        var volumes = getColumn("volume");
+        var vwaps = getColumn("vwap");
+        double high = -1e6;
+        double low = 1e6;
+        double vol = 0;
+        for (int i = start; i <= end; i++) {
+            high = Math.max(highs[i], high);
+            low = Math.min(lows[i], low);
+            vol += volumes[i];
+        }
+        return new Bar(dates[start], dates[end].plusMinutes(1), opens[start], high, low, closes[end], vol, vwaps[end]);
+    }
+
+    public Bar aggregrateDaily(IndexEntry e) {
+        return aggregrate(e.start(), e.end());
+    }
+
+    public Bar aggregrateRth(IndexEntry e) {
+        return aggregrate(e.rthStart(), e.rthEnd());
+    }
+
     // inclusive end dates
     public record IndexEntry(LocalDate tradeDate, int start, int end, int euStart, int euEnd,
                              int rthStart, int rthEnd, boolean isComplete) {
+
     }
 
     public Index makeIndex() {
@@ -141,13 +173,11 @@ public class PriceHistory implements Serializable {
         private Index() {
             LocalDateTime[] dates = PriceHistory.this.getDates();
             int start = 0;
-
             int lastIdx = dates.length - 1;
             for (int i = 0; i < dates.length; i++) {
-                var nextDt = i == lastIdx ? null : dates[i + 1];
-                if (nextDt == null || ChronoUnit.MINUTES.between(dates[i], nextDt) >= 30) {
+                if (i == lastIdx || ChronoUnit.MINUTES.between(dates[i], dates[i+1]) >= 30) {
                     indexEntries.add(createIndexEntry(dates, start, i));
-                    start = i;
+                    start = i + 1;
                 }
             }
             makeMessages(indexEntries.get(0));
@@ -156,27 +186,27 @@ public class PriceHistory implements Serializable {
         public NavigableMap<Long, String> makeMessages(IndexEntry e) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
             for (IndexEntry idx : indexEntries) {
-                var b = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.start(), idx.end());
+                var b = aggregrate(idx.start(), idx.end());
                 putMessage(priceMessages, b.open(), "%.2f glbx open");
                 putMessage(priceMessages, b.close(), "%.2f last");
                 var c = PriceHistory.this.getColumn("vwap");
                 putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
-                var glbx = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.start(), idx.euEnd());
+                var glbx = aggregrate(idx.start(), idx.euEnd());
                 putMessage(priceMessages, glbx.high(), "%.2f glbx hi");
                 putMessage(priceMessages, glbx.low(), "%.2f glbx lo");
 
                 if (idx.euStart() >= 0) {
-                    var eu = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.euStart(), idx.euEnd());
+                    var eu = aggregrate(idx.euStart(), idx.euEnd());
                     putMessage(priceMessages, eu.open(), "%.2f eu open");
                 }
 
                 if (idx.rthStart() >= 0) {
-                    var rth = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.rthStart(), idx.rthEnd());
+                    var rth = aggregrate(idx.rthStart(), idx.rthEnd());
                     putMessage(priceMessages, rth.open(), "%.2f open");
                     putMessage(priceMessages, rth.high(), "%.2f high");
                     putMessage(priceMessages, rth.low(), "%.2f low");
-                    var rthFirstHour = PriceHistory.Bar.aggregrate(PriceHistory.this, idx.rthStart(), idx.rthStart() + 59);
+                    var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
                     putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
                     putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");
                 }
@@ -213,12 +243,13 @@ public class PriceHistory implements Serializable {
                     start,
                     endInclusive,
                     euStart,
-                    rthStart > 0 ? rthStart - 1 : -1, rthStart,
+                    rthStart > 0 ? rthStart - 1 : -1,
+                    rthStart,
                     rthEnd,
                     rthEnd > 0);
         }
 
-        List<IndexEntry> getIndexEntries() {
+        List<IndexEntry> entries() {
             return Collections.unmodifiableList(indexEntries);
         }
 
@@ -228,32 +259,61 @@ public class PriceHistory implements Serializable {
             }
             return PriceHistory.this.getDates()[e.rthStart].toLocalDate();
         }
-    }
 
-    public record Bar(LocalDateTime start, LocalDateTime end, double open, double high, double low, double close,
-                      double volume) {
-        public static Bar aggregrate(PriceHistory hist, int start, int inclusiveEnd) {
-            int end = inclusiveEnd >= 0 ? Math.min(inclusiveEnd, hist.length() - 1) : hist.length() + inclusiveEnd;
-            if (start > end) {
-                throw new IllegalArgumentException("Invalid array bounds " + start + " " + inclusiveEnd);
-            }
-            var dates = hist.getDates();
-            var opens = hist.getColumn("open");
-            var highs = hist.getColumn("high");
-            var lows = hist.getColumn("low");
-            var closes = hist.getColumn("close");
-            var volumes = hist.getColumn("volume");
-            double high = -1e6;
-            double low = 1e6;
-            double vol = 0;
-            for (int i = start; i <= end; i++) {
-                high = Math.max(highs[i], high);
-                low = Math.min(lows[i], low);
-                vol += volumes[i];
-            }
-            return new Bar(dates[start], dates[end].plusMinutes(1), opens[start], high, low, closes[end], vol);
+        List<Bar> dailyBars() {
+            return indexEntries.stream().map(PriceHistory.this::aggregrateDaily).toList();
         }
 
+        List<Bar> rthBars() {
+            return indexEntries.stream().map(PriceHistory.this::aggregrateRth).toList();
+        }
+
+        List<Bar> minVolBars(double minVol) {
+            var vols = PriceHistory.this.getColumn("volume");
+            var lastBars = lastBars();
+            double v = 0;
+            int start = 0;
+            List<Bar> bars = new ArrayList<>();
+            for (int i = 0; i < vols.length; i++) {
+                v += vols[i];
+                if (isLastBar(i, lastBars) ||  v >= minVol) {
+                    bars.add(aggregrate(start, i));
+                    start = i + 1;
+                    v = 0;
+                }
+            }
+            return bars;
+        }
+
+        /**
+         * Remove head of q if it matches i
+         * @return true if i was the head of the queue
+         */
+        private boolean isLastBar(int i, Queue<Integer> lastBars) {
+            boolean f = !lastBars.isEmpty() && i == lastBars.peek();
+            if (f) {
+                lastBars.remove();
+            }
+            return f;
+        }
+
+        Queue<Integer> lastBars() {
+            Queue<Integer> q = new ArrayDeque<>();
+            for (IndexEntry entry : indexEntries) {
+                int i = entry.euEnd();
+                if (i > 0) q.add(i);
+                i = entry.end();
+                if (i > 0) q.add(i);
+            }
+            return q;
+        }
+    }
+
+    public record Bar(LocalDateTime start, LocalDateTime end, double open, double high, double low,
+                      double close, double volume, double vwap) {
+        public String asDailyBar() {
+            return String.format("%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f", start.toLocalDate(), open, high, low, close, volume, vwap);
+        }
     }
 
 }

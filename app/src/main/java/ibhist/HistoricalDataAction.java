@@ -43,8 +43,8 @@ public class HistoricalDataAction extends ActionBase {
     @Override
     public void request() {
 //        var d = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusMinutes(1);
-//        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss"));
-        client.reqHistoricalData(requestId, contract, "", "1 D", "1 min", "TRADES", 0, 1, false, null);
+//        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss")); 20231001 22:00:00
+        client.reqHistoricalData(requestId, contract, "", "10 D", "1 min", "TRADES", 0, 1, false, null);
     }
 
     @Override

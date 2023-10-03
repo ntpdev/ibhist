@@ -78,8 +78,8 @@ public class App {
         var action = new HistoricalDataAction(m_client, id, contract, App::processHistoricalData);
         actions.put(action.getRequestId(), action);
         action.request();
-        sleep(5_000);
-        action.cancel();
+        sleep(9_000);
+//        action.cancel();
     }
 
     private static void sleep(int millis) {
@@ -104,7 +104,7 @@ public class App {
             var history = action.getPriceHistory();
             var vwap = history.vwap("vwap");
             var index = history.makeIndex();
-//            action.save();
+            action.save();
         }
     }
 
