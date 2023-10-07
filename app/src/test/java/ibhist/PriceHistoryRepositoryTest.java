@@ -15,21 +15,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PriceHistoryRepositoryTest {
 
     @Test
+    void test_loadAllDays() {
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esh3", ".csv");
+        var history = repository.load();
+        var c = history.vwap("vwap");
+        assertThat(c.values.length).isEqualTo(history.length());
+        var rthBars = history.rthBars();
+        var minVol = history.minVolBars(2500d);
+        save(minVol);
+    }
+
+    @Test
     void test_loadSingleDay() {
         var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esu3", ".csv");
-        var history = repository.load(Path.of("c:\\temp\\ultra\\esz3"));
+        var history = repository.load(Path.of("c:\\temp\\ultra\\ESZ3 20230918.csv"));
         assertThat(history.length()).isEqualTo(13800);
         var c = history.vwap("vwap");
         assertThat(c.values.length).isEqualTo(history.length());
-        var index = history.makeIndex();
-        assertThat(index.entries()).hasSize(10);
-        var rthBars = index.rthBars();
+        var rthBars = history.rthBars();
         assertThat(rthBars).hasSize(10);
         for (PriceHistory.Bar bar : rthBars) {
             System.out.println(bar.asDailyBar());
         }
-        var minVol = index.minVolBars(2500d);
-        save(minVol);
     }
 
     private static void save(List<PriceHistory.Bar> minVol) {

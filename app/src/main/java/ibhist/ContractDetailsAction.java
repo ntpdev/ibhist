@@ -4,6 +4,7 @@ import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 import com.ib.client.EClientSocket;
 
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -13,8 +14,8 @@ public class ContractDetailsAction extends ActionBase {
 
     private ContractDetails contractDetails;
     private final Consumer<ContractDetailsAction> continuation;
-    public ContractDetailsAction(EClientSocket client, AtomicInteger idGenerator, Contract contract, Consumer<ContractDetailsAction> continuation) {
-        super(client, idGenerator);
+    public ContractDetailsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Consumer<ContractDetailsAction> continuation) {
+        super(client, idGenerator, queue);
         this.contract = contract;
         this.continuation = continuation;
     }
@@ -28,14 +29,14 @@ public class ContractDetailsAction extends ActionBase {
     }
 
     @Override
-    public void request() {
+    public void makeRequest() {
         client.reqContractDetails(requestId, contract);
     }
 
-    @Override
-    public void process() {
-        continuation.accept(this);
-    }
+//    @Override
+//    public void process() {
+//        continuation.accept(this);
+//    }
 
     public void process(ContractDetails contractDetails) {
         this.contractDetails = contractDetails;

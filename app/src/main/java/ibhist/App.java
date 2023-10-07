@@ -12,6 +12,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class App {
@@ -24,6 +26,8 @@ public class App {
     private static Contract contract;
 
     private static final AtomicInteger id = new AtomicInteger(100);
+
+    private static BlockingQueue<Action> queue = new ArrayBlockingQueue<>(16);
 
     public String getGreeting() {
         return "Hello World!";
@@ -44,16 +48,31 @@ public class App {
         reader.start();
         new Thread(App::connectionThread).start();
         sleep(1_000);
-        contractOperations();
-        sleep(10_000);
+        getHistoricalData();
+//        sleep(30_000);
         m_client.eDisconnect();
+        sleep(1_000);
     }
 
-    public static void connectionThread() {
+    private static void getHistoricalData() {
+        try {
+            requestContractDetails("ES", "202312");
+            ContractDetailsAction action = (ContractDetailsAction) queue.take();
+            processContractDetails(action);
+
+            requestHistoricalData(action.getContract());
+            HistoricalDataAction hdAction = (HistoricalDataAction) queue.take();
+            processHistoricalData(hdAction);
+        } catch (InterruptedException e) {
+            log.error(e);
+        }
+    }
+
+    static void connectionThread() {
         log.info("starting waiting for connection");
         while (m_client.isConnected()) {
             m_signal.waitForSignal();
-//            log.info("connected");
+            log.info("connected");
             try {
                 reader.processMsgs();
             } catch (Exception e) {
@@ -63,36 +82,33 @@ public class App {
         log.info("ended");
     }
 
-    private static void contractOperations() {
+    private static void requestContractDetails(String symbol, String contractMonth) {
         log.info("contractOperations");
         m_client.reqCurrentTime();
-        sleep(1_000);
 //        m_client.reqContractDetails(id.getAndIncrement(), simpleFuture("ES", "202312"));
-        var action = new ContractDetailsAction(m_client, id, makeFuture("ES", "202312"), App::processContractDetails);
+        var action = new ContractDetailsAction(m_client, id, queue, newFutureContract(symbol, contractMonth), App::processContractDetails);
         actions.put(action.getRequestId(), action);
-        action.request();
+        action.makeRequest();
     }
 
-    private static void historicalData(){
+    private static void requestHistoricalData(Contract c) {
         log.info("historicalData");
-        var action = new HistoricalDataAction(m_client, id, contract, App::processHistoricalData);
+        var action = new HistoricalDataAction(m_client, id, queue, c, Duration.D5, App::processHistoricalData);
         actions.put(action.getRequestId(), action);
-        action.request();
-        sleep(9_000);
+        action.makeRequest();
 //        action.cancel();
     }
 
     private static void sleep(int millis) {
         try {
             Thread.sleep(millis);
-        } catch (InterruptedException e) {}
+        } catch (InterruptedException ignored) {}
     }
 
     private static void processContractDetails(ContractDetailsAction action) {
         var cd = action.getContractDetails();
         log.info(cd.conid());
         contract = action.getContract();
-        historicalData();
     }
 
     private static void processHistoricalData(HistoricalDataAction action) {
@@ -103,12 +119,13 @@ public class App {
             log.info(contract.localSymbol() + " bars from " + bars.get(0).time() + " to " + bars.get(bars.size() - 1).time());
             var history = action.getPriceHistory();
             var vwap = history.vwap("vwap");
-            var index = history.makeIndex();
+            var index = history.index();
+//            var index2 = history.index();
             action.save();
         }
     }
 
-    public static Contract makeFuture(String symbol, String contractMonth) {
+    public static Contract newFutureContract(String symbol, String contractMonth) {
         //! [futcontract]
         Contract contract = new Contract();
         contract.symbol(symbol);

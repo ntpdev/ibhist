@@ -176,6 +176,15 @@ public class EWrapperImpl implements EWrapper {
     }
 
     @Override
+    public void historicalDataUpdate(int i, Bar bar) {
+        log.info("historicalDataUpdate " + i);
+        if (actions.get(i) instanceof HistoricalDataAction a) {
+            log.info(bar.time() + " " + bar.close());
+//            a.process(bar);
+        }
+    }
+
+    @Override
     public void historicalDataEnd(int i, String start, String end) {
         log.info("historicalDataEnd " + i + " " + start + " " + end);
         if (actions.get(i) instanceof HistoricalDataAction a) {
@@ -401,11 +410,6 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void histogramData(int i, List<HistogramEntry> list) {
-
-    }
-
-    @Override
-    public void historicalDataUpdate(int i, Bar bar) {
 
     }
 

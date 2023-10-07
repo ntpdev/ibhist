@@ -1,5 +1,6 @@
 package ibhist;
 
+import com.google.common.base.Suppliers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -8,12 +9,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.function.Supplier;
 
 public class PriceHistory implements Serializable {
     private static final Logger log = LogManager.getLogger("PriceHistory");
 
     LocalDateTime[] dates;
     List<Column> columns = new ArrayList<>();
+    transient Supplier<Index> index;
 
     PriceHistory(int size, String... names) {
         for (String name : names) {
@@ -159,13 +162,63 @@ public class PriceHistory implements Serializable {
 
     // inclusive end dates
     public record IndexEntry(LocalDate tradeDate, int start, int end, int euStart, int euEnd,
-                             int rthStart, int rthEnd, boolean isComplete) {
+                             int rthStart, int rthEnd, boolean isComplete) {}
 
+    public Index index() {
+        if (index == null) {
+            index = Suppliers.memoize(Index::new);
+        }
+        return index.get();
     }
 
-    public Index makeIndex() {
-        return new Index();
+    List<Bar> dailyBars() {
+        return index().indexEntries.stream().map(PriceHistory.this::aggregrateDaily).toList();
     }
+
+    List<Bar> rthBars() {
+        return index().indexEntries.stream().map(PriceHistory.this::aggregrateRth).toList();
+    }
+
+    List<Bar> minVolBars(double minVol) {
+        var vols = getColumn("volume");
+        var lastBars = lastBars();
+        double v = 0;
+        int start = 0;
+        List<Bar> bars = new ArrayList<>();
+        for (int i = 0; i < vols.length; i++) {
+            v += vols[i];
+            if (isLastBar(i, lastBars) ||  v >= minVol) {
+                bars.add(aggregrate(start, i));
+                start = i + 1;
+                v = 0;
+            }
+        }
+        return bars;
+    }
+
+    /**
+     * Remove head of q if it matches i
+     * @return true if i was the head of the queue
+     */
+    private boolean isLastBar(int i, Queue<Integer> lastBars) {
+        boolean f = !lastBars.isEmpty() && i == lastBars.peek();
+        if (f) {
+            lastBars.remove();
+        }
+        return f;
+    }
+
+    Queue<Integer> lastBars() {
+        Queue<Integer> q = new ArrayDeque<>();
+        for (IndexEntry entry : index().indexEntries) {
+            int i = entry.euEnd();
+            if (i > 0) q.add(i);
+            i = entry.end();
+            if (i > 0) q.add(i);
+        }
+        return q;
+    }
+
 
     public class Index {
         List<PriceHistory.IndexEntry> indexEntries = new ArrayList<>();
@@ -258,54 +311,6 @@ public class PriceHistory implements Serializable {
                 throw new IllegalStateException("Index does not have rth start " + e);
             }
             return PriceHistory.this.getDates()[e.rthStart].toLocalDate();
-        }
-
-        List<Bar> dailyBars() {
-            return indexEntries.stream().map(PriceHistory.this::aggregrateDaily).toList();
-        }
-
-        List<Bar> rthBars() {
-            return indexEntries.stream().map(PriceHistory.this::aggregrateRth).toList();
-        }
-
-        List<Bar> minVolBars(double minVol) {
-            var vols = PriceHistory.this.getColumn("volume");
-            var lastBars = lastBars();
-            double v = 0;
-            int start = 0;
-            List<Bar> bars = new ArrayList<>();
-            for (int i = 0; i < vols.length; i++) {
-                v += vols[i];
-                if (isLastBar(i, lastBars) ||  v >= minVol) {
-                    bars.add(aggregrate(start, i));
-                    start = i + 1;
-                    v = 0;
-                }
-            }
-            return bars;
-        }
-
-        /**
-         * Remove head of q if it matches i
-         * @return true if i was the head of the queue
-         */
-        private boolean isLastBar(int i, Queue<Integer> lastBars) {
-            boolean f = !lastBars.isEmpty() && i == lastBars.peek();
-            if (f) {
-                lastBars.remove();
-            }
-            return f;
-        }
-
-        Queue<Integer> lastBars() {
-            Queue<Integer> q = new ArrayDeque<>();
-            for (IndexEntry entry : indexEntries) {
-                int i = entry.euEnd();
-                if (i > 0) q.add(i);
-                i = entry.end();
-                if (i > 0) q.add(i);
-            }
-            return q;
         }
     }
 
