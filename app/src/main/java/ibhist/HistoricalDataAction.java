@@ -9,26 +9,25 @@ import com.ib.client.EClientSocket;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 public class HistoricalDataAction extends ActionBase {
 //    private static final SimpleDateFormat FORMAT = new SimpleDateFormat("yyyyMMdd-HH:mm:ss");
     private static final Splitter SPLITTER_WS = Splitter.on(CharMatcher.whitespace());
-    private final Consumer<HistoricalDataAction> continuation;
     private final Contract contract;
     private final Duration duration;
 
     private final List<Bar> bars = new ArrayList<>();
 
-    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration, Consumer<HistoricalDataAction> continuation) {
+    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration) {
         super(client, idGenerator, queue);
         this.contract = contract;
         this.duration = duration;
-        this.continuation = continuation;
     }
 
     public Contract getContract() {
@@ -80,9 +79,10 @@ public class HistoricalDataAction extends ActionBase {
         return repository.loadFromIBBars(bars);
     }
 
-    public void save() {
+        public void save(LocalDate startDate) {
         try {
-            var p = Path.of("c:\\temp\\ultra\\", contract.localSymbol());
+            String fname = "z" + contract.localSymbol() + " " + startDate.format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv";
+            var p = Path.of("c:\\temp\\ultra\\", fname);
             log.info("saving file " + p);
             Files.writeString(p, getBarsAsCsv());
         } catch (IOException e) {

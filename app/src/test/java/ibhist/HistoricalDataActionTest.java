@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -18,15 +17,13 @@ class HistoricalDataActionTest {
 
     @Test
     void test_process_captures_bars_and_formats() throws InterruptedException {
-        Consumer<HistoricalDataAction> mockConsumer = mock(Consumer.class);
         BlockingQueue<Action> mockQueue = mock(BlockingQueue.class);
-        var h = new HistoricalDataAction(null, new AtomicInteger(), mockQueue, new Contract(), Duration.D1, mockConsumer);
+        var h = new HistoricalDataAction(null, new AtomicInteger(), mockQueue, new Contract(), Duration.D1);
         h.process(newBar(4983d));
         h.process(newBar(4984d));
 
         h.process();
 
-//        verify(mockConsumer).accept(eq(h));
         verify(mockQueue).put(eq(h));
         assertThat(h.getBars()).hasSize(2);
         // text blocks use \n as line separator but the csv is created using the system line separator

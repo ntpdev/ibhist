@@ -23,15 +23,9 @@ public class App {
     private static EReader reader;
     private static final Map<Integer, Action> actions = new TreeMap<>();
 
-    private static Contract contract;
-
     private static final AtomicInteger id = new AtomicInteger(100);
 
-    private static BlockingQueue<Action> queue = new ArrayBlockingQueue<>(16);
-
-    public String getGreeting() {
-        return "Hello World!";
-    }
+    private static final BlockingQueue<Action> queue = new ArrayBlockingQueue<>(16);
 
     public static void main(String[] args) {
         log.info(System.getProperty("java.version"));
@@ -48,15 +42,17 @@ public class App {
         reader.start();
         new Thread(App::connectionThread).start();
         sleep(1_000);
-        getHistoricalData();
+        m_client.reqCurrentTime();
+        getHistoricalData("ES", "202312");
+        getHistoricalData("NQ", "202312");
 //        sleep(30_000);
         m_client.eDisconnect();
         sleep(1_000);
     }
 
-    private static void getHistoricalData() {
+    private static void getHistoricalData(String symbol, String contractMonth) {
         try {
-            requestContractDetails("ES", "202312");
+            requestContractDetails(symbol, contractMonth);
             ContractDetailsAction action = (ContractDetailsAction) queue.take();
             processContractDetails(action);
 
@@ -69,31 +65,30 @@ public class App {
     }
 
     static void connectionThread() {
-        log.info("starting waiting for connection");
-        while (m_client.isConnected()) {
-            m_signal.waitForSignal();
-            log.info("connected");
-            try {
+        try {
+            log.info("starting waiting for connection");
+            while (m_client.isConnected()) {
+                m_signal.waitForSignal();
+//            log.info("connected");
                 reader.processMsgs();
-            } catch (Exception e) {
-                System.out.println("Exception: " + e.getMessage());
             }
+            log.info("ended");
+        } catch (Exception e) {
+            log.error(e);
         }
-        log.info("ended");
     }
 
     private static void requestContractDetails(String symbol, String contractMonth) {
         log.info("contractOperations");
-        m_client.reqCurrentTime();
 //        m_client.reqContractDetails(id.getAndIncrement(), simpleFuture("ES", "202312"));
-        var action = new ContractDetailsAction(m_client, id, queue, newFutureContract(symbol, contractMonth), App::processContractDetails);
+        var action = new ContractDetailsAction(m_client, id, queue, newFutureContract(symbol, contractMonth));
         actions.put(action.getRequestId(), action);
         action.makeRequest();
     }
 
-    private static void requestHistoricalData(Contract c) {
+    private static void requestHistoricalData(Contract contract) {
         log.info("historicalData");
-        var action = new HistoricalDataAction(m_client, id, queue, c, Duration.D5, App::processHistoricalData);
+        var action = new HistoricalDataAction(m_client, id, queue, contract, Duration.D5);
         actions.put(action.getRequestId(), action);
         action.makeRequest();
 //        action.cancel();
@@ -102,13 +97,13 @@ public class App {
     private static void sleep(int millis) {
         try {
             Thread.sleep(millis);
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
     }
 
     private static void processContractDetails(ContractDetailsAction action) {
         var cd = action.getContractDetails();
-        log.info(cd.conid());
-        contract = action.getContract();
+        log.info(cd.conid() + " " + cd.contract().description());
     }
 
     private static void processHistoricalData(HistoricalDataAction action) {
@@ -120,8 +115,9 @@ public class App {
             var history = action.getPriceHistory();
             var vwap = history.vwap("vwap");
             var index = history.index();
+            var entry = index.entries().get(0);
 //            var index2 = history.index();
-            action.save();
+            action.save(entry.tradeDate());
         }
     }
 

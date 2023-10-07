@@ -60,8 +60,7 @@ public class PriceHistoryRepository {
     }
 
     private PriceHistory loadImpl() throws IOException {
-        var files = list(root, prefix, extension);
-        var parsedCsv = loadCsv(files);
+        var parsedCsv = loadCsv(list());
         PriceHistory priceHistory = new PriceHistory(parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
         int i = 0;
         LocalDateTime lastBar = null;
@@ -134,7 +133,7 @@ public class PriceHistoryRepository {
         }
     }
 
-    List<Path> list(Path root, String prefix, String extension) throws IOException {
+    List<Path> list() throws IOException {
         return Files.list(root)
                 .filter(this::matches)
                 .sorted()
