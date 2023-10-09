@@ -1,9 +1,10 @@
 package ibhist;
 
 public enum Duration {
-    D1("1 D"),
-    D5("5 D"),
-    D10("10 D");
+    DAY_1("1 D"),
+    DAY_5("5 D"),
+    DAY_10("10 D"),
+    YEAR_1("1 Y");
 
     private final String code;
 

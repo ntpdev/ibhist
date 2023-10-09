@@ -43,25 +43,29 @@ public class App {
         new Thread(App::connectionThread).start();
         sleep(1_000);
         m_client.reqCurrentTime();
-        getHistoricalData("ES", "202312");
-        getHistoricalData("NQ", "202312");
+        getHistoricalData("ES", "202312", Duration.DAY_1);
+//        getHistoricalData("NQ", "202312", Duration.DAY_5);
 //        sleep(30_000);
         m_client.eDisconnect();
         sleep(1_000);
     }
 
-    private static void getHistoricalData(String symbol, String contractMonth) {
+    private static void getHistoricalData(String symbol, String contractMonth, Duration duration) {
         try {
             requestContractDetails(symbol, contractMonth);
-            ContractDetailsAction action = (ContractDetailsAction) queue.take();
+            var action = takeFromQueue(ContractDetailsAction.class);
             processContractDetails(action);
 
-            requestHistoricalData(action.getContract());
-            HistoricalDataAction hdAction = (HistoricalDataAction) queue.take();
+            requestHistoricalData(action.getContract(),  duration);
+            var hdAction = takeFromQueue(HistoricalDataAction.class);
             processHistoricalData(hdAction);
         } catch (InterruptedException e) {
             log.error(e);
         }
+    }
+
+    private static <T> T takeFromQueue(Class<T> clz) throws InterruptedException {
+        return clz.cast(queue.take());
     }
 
     static void connectionThread() {
@@ -86,9 +90,9 @@ public class App {
         action.makeRequest();
     }
 
-    private static void requestHistoricalData(Contract contract) {
+    private static void requestHistoricalData(Contract contract, Duration duration) {
         log.info("historicalData");
-        var action = new HistoricalDataAction(m_client, id, queue, contract, Duration.D5);
+        var action = new HistoricalDataAction(m_client, id, queue, contract, duration);
         actions.put(action.getRequestId(), action);
         action.makeRequest();
 //        action.cancel();
@@ -117,7 +121,9 @@ public class App {
             var index = history.index();
             var entry = index.entries().get(0);
 //            var index2 = history.index();
-            action.save(entry.tradeDate());
+//            action.save(entry.tradeDate());
+            TimeSeriesRepository repository = new TimeSeriesRepository("mongodb://localhost:27017");
+            repository.insert(history);
         }
     }
 

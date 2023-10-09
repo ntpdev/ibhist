@@ -29,6 +29,9 @@ dependencies {
     implementation("com.google.guava:guava:32.1.2-jre")
     // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
     implementation("org.apache.logging.log4j:log4j-core:2.20.0")
+    // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync
+    implementation("org.mongodb:mongodb-driver-sync:4.10.2")
+
 
     // add all jar files in lib dir
     implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.jar"))))
