@@ -14,11 +14,13 @@ import java.util.function.Supplier;
 public class PriceHistory implements Serializable {
     private static final Logger log = LogManager.getLogger("PriceHistory");
 
+    private final String symbol;
     LocalDateTime[] dates;
     List<Column> columns = new ArrayList<>();
     transient Supplier<Index> index;
 
-    PriceHistory(int size, String... names) {
+    PriceHistory(String symbol, int size, String... names) {
+        this.symbol = symbol;
         for (String name : names) {
             if (name.equals("date")) {
                 dates = new LocalDateTime[size];
@@ -32,13 +34,12 @@ public class PriceHistory implements Serializable {
         return columns.get(0).values.length;
     }
 
-    public void insert(int index, LocalDateTime date, double open, double high, double low, double close, int volume) {
-        dates[index] = date;
-        columns.get(0).values[index] = open;
-        columns.get(1).values[index] = high;
-        columns.get(2).values[index] = low;
-        columns.get(3).values[index] = close;
-        columns.get(4).values[index] = volume;
+    public String getSymbol() {
+        return symbol;
+    }
+
+    public String getSymbolLowerCase() {
+        return symbol.toLowerCase();
     }
 
     public LocalDateTime[] getDates() {
@@ -52,6 +53,41 @@ public class PriceHistory implements Serializable {
             }
         }
         throw new RuntimeException("column not found " + name);
+    }
+
+    public int find(LocalDateTime target) {
+        return Arrays.binarySearch(dates, target);
+    }
+
+    public int floor(LocalDateTime target) {
+        int p = find(target);
+        if (p >= 0) {
+            return p;
+        }
+        p = -(p + 2);
+        if (p == 0) {
+            throw new RuntimeException("date " + target + " is before start of the PriceHistory ");
+        }
+        return p;
+    }
+
+    public void insert(int index, LocalDateTime date, double open, double high, double low, double close, int volume) {
+        dates[index] = date;
+        columns.get(0).values[index] = open;
+        columns.get(1).values[index] = high;
+        columns.get(2).values[index] = low;
+        columns.get(3).values[index] = close;
+        columns.get(4).values[index] = volume;
+    }
+
+    public void insert(int index, LocalDateTime date, double open, double high, double low, double close, double volume, double vwap) {
+        dates[index] = date;
+        columns.get(0).values[index] = open;
+        columns.get(1).values[index] = high;
+        columns.get(2).values[index] = low;
+        columns.get(3).values[index] = close;
+        columns.get(4).values[index] = volume;
+        columns.get(5).values[index] = vwap;
     }
 
     Column average(String a, String b, String output) {
@@ -97,11 +133,11 @@ public class PriceHistory implements Serializable {
     }
 
     // add vwap col
-    Column vwap(String output) {
+    Column vwap(String name) {
         var highs = getColumn("high");
         var lows = getColumn("low");
         var vols = getColumn("volume");
-        var c = new Column("vwap", length());
+        var c = new Column(name, length());
         double cumVol = 0;
         double totalVwap = 0;
         var lastDt = dates[0];
@@ -110,8 +146,10 @@ public class PriceHistory implements Serializable {
                 cumVol = 0;
                 totalVwap = 0;
             }
-            cumVol += vols[i];
-            totalVwap += vols[i] * (highs[i] + lows[i]) * .5d;
+
+            double vol = vols[i];
+            cumVol += vol;
+            totalVwap += vol * (highs[i] + lows[i]) * .5d;
             c.values[i] = totalVwap / cumVol;
             lastDt = dates[i];
         }
@@ -127,6 +165,20 @@ public class PriceHistory implements Serializable {
             this.name = name;
             values = new double[size];
         }
+    }
+
+    public Bar bar(int i) {
+        return new Bar(dates[i], dates[i].plusMinutes(1),
+                columns.get(0).values[i],
+                columns.get(1).values[i],
+                columns.get(2).values[i],
+                columns.get(3).values[i],
+                columns.get(4).values[i],
+                columns.get(5).values[i]);
+    }
+
+    public Bar bar(LocalDateTime d) {
+        return bar(find(d));
     }
 
     public Bar aggregrate(int start, int inclusiveEnd) {
@@ -162,7 +214,8 @@ public class PriceHistory implements Serializable {
 
     // inclusive end dates
     public record IndexEntry(LocalDate tradeDate, int start, int end, int euStart, int euEnd,
-                             int rthStart, int rthEnd, boolean isComplete) {}
+                             int rthStart, int rthEnd, boolean isComplete) {
+    }
 
     public Index index() {
         if (index == null) {
@@ -187,7 +240,7 @@ public class PriceHistory implements Serializable {
         List<Bar> bars = new ArrayList<>();
         for (int i = 0; i < vols.length; i++) {
             v += vols[i];
-            if (isLastBar(i, lastBars) ||  v >= minVol) {
+            if (isLastBar(i, lastBars) || v >= minVol) {
                 bars.add(aggregrate(start, i));
                 start = i + 1;
                 v = 0;
@@ -198,6 +251,7 @@ public class PriceHistory implements Serializable {
 
     /**
      * Remove head of q if it matches i
+     *
      * @return true if i was the head of the queue
      */
     private boolean isLastBar(int i, Queue<Integer> lastBars) {
@@ -219,6 +273,13 @@ public class PriceHistory implements Serializable {
         return q;
     }
 
+    @Override
+    public String toString() {
+        return "PriceHistory[symbol=" + symbol +
+                ", size=" + length() +
+                ", from=" + dates[0] +
+                ", to=" + dates[length() - 1] + "]";
+    }
 
     public class Index {
         List<PriceHistory.IndexEntry> indexEntries = new ArrayList<>();
@@ -228,7 +289,7 @@ public class PriceHistory implements Serializable {
             int start = 0;
             int lastIdx = dates.length - 1;
             for (int i = 0; i < dates.length; i++) {
-                if (i == lastIdx || ChronoUnit.MINUTES.between(dates[i], dates[i+1]) >= 30) {
+                if (i == lastIdx || ChronoUnit.MINUTES.between(dates[i], dates[i + 1]) >= 30) {
                     indexEntries.add(createIndexEntry(dates, start, i));
                     start = i + 1;
                 }

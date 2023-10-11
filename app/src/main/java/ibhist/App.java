@@ -123,7 +123,7 @@ public class App {
 //            var index2 = history.index();
 //            action.save(entry.tradeDate());
             TimeSeriesRepository repository = new TimeSeriesRepository("mongodb://localhost:27017");
-            repository.insert(history);
+            repository.append(history);
         }
     }
 

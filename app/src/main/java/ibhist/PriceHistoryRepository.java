@@ -32,36 +32,41 @@ public class PriceHistoryRepository {
     static final Splitter DATE_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();
 
     private final Path root;
-    private final String prefix;
     private final String extension;
-    private final Path cacheFile;
 
-    PriceHistoryRepository(Path root, String prefix, String extension) {
+    PriceHistoryRepository(Path root, String extension) {
         this.root = root;
-        this.prefix = prefix;
         this.extension = extension;
-        cacheFile = root.resolve(prefix + ".bin");
     }
 
-    PriceHistory load() {
+    PriceHistory load(String symbol) {
         try {
-            PriceHistory priceHistory = useCachedFile() ? loadFromCache() : loadAndCache();
-            log.info("file loaded");
+            Path cacheFile = root.resolve(symbol + ".bin");
+            PriceHistory priceHistory = useCachedFile(cacheFile) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
+            log.info("file loaded " + priceHistory);
             return priceHistory;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    PriceHistory loadAndCache() throws IOException {
-        PriceHistory priceHistory = loadImpl();
-        saveToCache(priceHistory);
+    private boolean useCachedFile(Path cacheFile) throws IOException {
+        if (!Files.exists(cacheFile)) {
+            return false;
+        }
+        FileTime lastModifiedTime = Files.getLastModifiedTime(cacheFile);
+        return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * 60));
+    }
+
+    PriceHistory loadAndCache(String symbol, Path cacheFile) throws IOException {
+        PriceHistory priceHistory = loadImpl(symbol);
+        saveToCache(cacheFile, priceHistory);
         return priceHistory;
     }
 
-    private PriceHistory loadImpl() throws IOException {
-        var parsedCsv = loadCsv(list());
-        PriceHistory priceHistory = new PriceHistory(parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
+    private PriceHistory loadImpl(String symbol) throws IOException {
+        var parsedCsv = loadCsv(list(symbol));
+        PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
         int i = 0;
         LocalDateTime lastBar = null;
         for (IBCSV line : parsedCsv) {
@@ -80,18 +85,10 @@ public class PriceHistoryRepository {
         return priceHistory;
     }
 
-    private boolean useCachedFile() throws IOException {
-        if (!Files.exists(cacheFile)) {
-            return false;
-        }
-        FileTime lastModifiedTime = Files.getLastModifiedTime(cacheFile);
-        return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * 60));
-    }
-
-    PriceHistory load(Path file) {
+    PriceHistory load(String symbol, Path file) {
         try {
             var parsedCsv = loadCsv(List.of(file));
-            PriceHistory priceHistory = new PriceHistory(parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
+            PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
             int i = 0;
             for (PriceHistoryRepository.IBCSV line : parsedCsv) {
                 priceHistory.insert(i++, line.date(), line.open().doubleValue(), line.high().doubleValue(), line.low().doubleValue(), line.close().doubleValue(), line.volume());
@@ -102,7 +99,7 @@ public class PriceHistoryRepository {
         }
     }
 
-    PriceHistory loadFromCache() {
+    PriceHistory loadFromCache(Path cacheFile) {
         log.info("Loading from cache file " + cacheFile);
         try (ObjectInputStream objectOutput = new ObjectInputStream(
                 new GZIPInputStream(new FileInputStream(cacheFile.toFile())));) {
@@ -112,8 +109,8 @@ public class PriceHistoryRepository {
         }
     }
 
-    PriceHistory loadFromIBBars(List<Bar> bars) {
-        PriceHistory priceHistory = new PriceHistory(bars.size(), "date", "open", "high", "low", "close", "volume");
+    PriceHistory loadFromIBBars(String symbol, List<Bar> bars) {
+        PriceHistory priceHistory = new PriceHistory(symbol, bars.size(), "date", "open", "high", "low", "close", "volume");
         int i = 0;
         for (Bar bar : bars) {
             var dateParts = DATE_SPLITTER.splitToList(bar.time());
@@ -123,7 +120,7 @@ public class PriceHistoryRepository {
 
     }
 
-    void saveToCache(PriceHistory priceHistory) {
+    void saveToCache(Path cacheFile, PriceHistory priceHistory) {
         log.info("Saving to cache file " + cacheFile);
         try (ObjectOutputStream objectOutput = new ObjectOutputStream(
                 new GZIPOutputStream(new FileOutputStream(cacheFile.toFile())))) {
@@ -133,14 +130,14 @@ public class PriceHistoryRepository {
         }
     }
 
-    List<Path> list() throws IOException {
+    List<Path> list(String symbol) throws IOException {
         return Files.list(root)
-                .filter(this::matches)
+                .filter(e -> matches(e, symbol))
                 .sorted()
                 .toList();
     }
 
-    boolean matches(Path path) {
+    boolean matches(Path path, String prefix) {
         String fname = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return fname.startsWith(prefix) && fname.endsWith(extension);
     }

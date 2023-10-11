@@ -16,10 +16,20 @@ class PriceHistoryRepositoryTest {
 
     @Test
     void test_loadAllDays() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esh3", ".csv");
-        var history = repository.load();
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        var history = repository.load("esz3");
         var c = history.vwap("vwap");
         assertThat(c.values.length).isEqualTo(history.length());
+        LocalDateTime date = history.getDates()[9420];
+        int pos = history.find(date);
+        assertThat(pos).isEqualTo(9420);
+        var b = history.bar(pos);
+        pos = history.find(date.minusMinutes(1));
+        assertThat(pos).isLessThan(0);
+        pos = history.floor(date.minusMinutes(1));
+        assertThat(pos).isEqualTo(9419);
+//        TimeSeriesRepository tsr = new TimeSeriesRepository("mongodb://localhost:27017");
+//        tsr.append(history);
         var rthBars = history.rthBars();
         var minVol = history.minVolBars(2500d);
         save(minVol);
@@ -27,8 +37,8 @@ class PriceHistoryRepositoryTest {
 
     @Test
     void test_loadSingleDay() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esu3", ".csv");
-        var history = repository.load(Path.of("c:\\temp\\ultra\\ESZ3 20230918.csv"));
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        var history = repository.load("ESZ3", Path.of("c:\\temp\\ultra\\ESZ3 20230918.csv"));
         assertThat(history.length()).isEqualTo(13800);
         var c = history.vwap("vwap");
         assertThat(c.values.length).isEqualTo(history.length());
@@ -57,9 +67,9 @@ class PriceHistoryRepositoryTest {
     void test_load_ib_bars() {
         List<Bar> bars = List.of(
                 new Bar("20230919 23:00:00 Europe/London", 21.25, 25.75, 19.00, 22.50, Decimal.get(123.45d), 13, Decimal.get(23.45d)));
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), "esu3", ".csv");
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
 
-        var history = repository.loadFromIBBars(bars);
+        var history = repository.loadFromIBBars("test", bars);
 
         assertThat(history.length()).isEqualTo(1);
         assertThat(history.getDates()[0]).isEqualTo(LocalDateTime.of(2023, 9, 19, 23, 0, 0));

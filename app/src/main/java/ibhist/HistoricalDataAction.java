@@ -75,8 +75,8 @@ public class HistoricalDataAction extends ActionBase {
     }
 
     public PriceHistory getPriceHistory() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), contract.localSymbol(), ".csv");
-        return repository.loadFromIBBars(bars);
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        return repository.loadFromIBBars(contract.localSymbol(), bars);
     }
 
         public void save(LocalDate startDate) {
