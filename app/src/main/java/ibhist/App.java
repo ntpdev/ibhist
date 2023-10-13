@@ -17,6 +17,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class App {
+    public static final String CONNECTION_STRING = "mongodb://localhost:27017";
+    public static final String DATABASE_NAME = "futures";
+    public static final String COLLECTION_NAME = "m1";
     private static final Logger log = LogManager.getLogger("App");
     private static EClientSocket m_client;
     private static EReaderSignal m_signal;
@@ -43,7 +46,7 @@ public class App {
         new Thread(App::connectionThread).start();
         sleep(1_000);
         m_client.reqCurrentTime();
-        getHistoricalData("ES", "202312", Duration.DAY_1);
+        getHistoricalData("ES", "202312", Duration.DAY_5);
 //        getHistoricalData("NQ", "202312", Duration.DAY_5);
 //        sleep(30_000);
         m_client.eDisconnect();
@@ -122,7 +125,7 @@ public class App {
             var entry = index.entries().get(0);
 //            var index2 = history.index();
 //            action.save(entry.tradeDate());
-            TimeSeriesRepository repository = new TimeSeriesRepository("mongodb://localhost:27017");
+            TimeSeriesRepository repository = new TimeSeriesRepository(CONNECTION_STRING, DATABASE_NAME, COLLECTION_NAME);
             repository.append(history);
         }
     }

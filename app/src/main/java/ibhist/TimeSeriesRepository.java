@@ -1,5 +1,6 @@
 package ibhist;
 
+import com.google.common.base.Suppliers;
 import com.google.common.math.DoubleMath;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
@@ -11,9 +12,12 @@ import com.mongodb.client.model.*;
 import com.mongodb.client.result.InsertManyResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.pojo.PojoCodecProvider;
+import org.bson.codecs.pojo.annotations.BsonId;
+import org.bson.conversions.Bson;
 
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
@@ -27,62 +31,22 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public class TimeSeriesRepository {
     private static final Logger log = LogManager.getLogger("TimeSeriesRepository");
 
     public static final ZoneId UTC = ZoneId.of("UTC");
     private final String connectionString;
+    private final String collectionName;
+    private final Supplier<MongoClient> client;
+    private final Supplier<MongoDatabase> db;
 
-    public TimeSeriesRepository(String connectionString) {
+    public TimeSeriesRepository(String connectionString, String dbName, String collectionName) {
         this.connectionString = Objects.requireNonNull(connectionString);
-    }
-
-    public static void main(String[] args) {
-        new TimeSeriesRepository("mongodb://localhost:27017").test2();
-    }
-
-    public void test() {
-        try (MongoClient mongoClient = createClient()) {
-            MongoDatabase db = mongoClient.getDatabase("futures");
-//            createTimeSeriesCollection(db, "m1", "symbol", "timestamp");
-            var collection = db.getCollection("m1");
-            log.info(summary(collection));
-//            var m1 = db.getCollection("m1", PriceBarM.class);
-//            var fSymbol = Filters.eq("symbol", "esz3");
-//            var xs = m1.find(fSymbol).into(new ArrayList<>());
-//            log.info(xs.size());
-//            log.info(xs.get(xs.size()-1));
-//            db.createCollection("m1");
-//            log.info(m1.find().sort(Sorts.descending("timestamp")).first());
-            //Filters.gte("Open", 4500.0d)
-//            Instant inst = Instant.parse("2023-10-09T12:00:00Z");
-//            var fTimestamp = Filters.gte("timestamp", Date.from(inst));
-//            var filter = Filters.and(fSymbol, fTimestamp);
-//            AggregateIterable<Document> aggregate = m1.aggregate(List.of(Aggregates.group("$symbol", Accumulators.max("op", "$open"))));
-//            try (var cursor = aggregate.cursor()) {
-//                while (cursor.hasNext()) {
-//                    var d = cursor.next();
-//                    log.info(d.toJson());
-//                }
-//            }
-//
-//            try (var cursor = m1.find(filter).sort(Sorts.descending("timestamp")).limit(10).cursor()) {
-//                while (cursor.hasNext()) {
-//                    Document x = cursor.next();
-//                    log.info(x.toJson());
-//                    log.info(x.get("timestamp").getClass().getCanonicalName() + " " + getTimestamp(x));
-//                }
-//            }
-        } catch (Exception e) {
-            log.error(e);
-        }
-    }
-
-    void test2() {
-        var xs = load("esh3", LocalDate.of(2023, 3, 9));
-        log.info(xs);
-        log.info(xs.rthBars());
+        this.collectionName = Objects.requireNonNull(collectionName);
+        client = Suppliers.memoize(this::createClient);
+        db = Suppliers.memoize(() -> client.get().getDatabase(dbName));
     }
 
     MongoClient createClient() {
@@ -92,32 +56,39 @@ public class TimeSeriesRepository {
         return MongoClients.create(settings);
     }
 
+    private MongoCollection<Document> getCollection() {
+        return db.get().getCollection(collectionName);
+    }
+
     /**
      * drop existing collection if it exists and create a new time series collection
      */
-    MongoCollection<Document> newTimeSeriesCollection(MongoDatabase db, String collectionName) {
+    MongoCollection<Document> newTimeSeriesCollection(boolean fNew) {
         try {
-            var c = db.getCollection(collectionName);
-            return c;
-//            c.drop();
+            var c = getCollection();
+            if (fNew) {
+                c.drop();
+            } else {
+                return c;
+            }
         } catch (IllegalArgumentException e) {
             log.error(e);
         }
-        createTimeSeriesCollection(db, collectionName, "symbol", "timestamp");
-        return db.getCollection(collectionName);
+        createTimeSeriesCollection("symbol", "timestamp");
+        return getCollection();
     }
 
-    void createTimeSeriesCollection(MongoDatabase db, String collectionName, String metaName, String timestampName) {
+    void createTimeSeriesCollection(String metaName, String timestampName) {
         TimeSeriesOptions options = new TimeSeriesOptions(timestampName)
-                .granularity(TimeSeriesGranularity.SECONDS)
+                .granularity(TimeSeriesGranularity.MINUTES)
                 .metaField(metaName);
-        db.createCollection(collectionName, new CreateCollectionOptions().timeSeriesOptions(options));
+        db.get().createCollection(collectionName, new CreateCollectionOptions().timeSeriesOptions(options));
     }
 
     /**
      * Convert Date field to LocalDate time assuming the date is in UTC
      */
-    private static @Nullable LocalDateTime getLocalDateTime(Document d, String fieldName) {
+    private static @Nullable LocalDateTime asLocalDateTime(Document d, String fieldName) {
         Date dt = d.get(fieldName, Date.class);
         return dt == null ? null : LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), ZoneId.of("UTC"));
     }
@@ -130,30 +101,18 @@ public class TimeSeriesRepository {
     }
 
     public void insert(PriceHistory history) {
-        log.info("inserting into " + connectionString + " " + history);
-        try (MongoClient mongoClient = createClient()) {
-            MongoDatabase db = mongoClient.getDatabase("futures");
-//            createTimeSeriesCollection(db, "m1", "symbol", "timestamp");
-//            MongoCollection<Document> m1 = db.getCollection("m1");
-//            insert(m1, history);
-            var collection = newTimeSeriesCollection(db, "m1");
-            var r = insert(collection, history);
-            log.info("inserted documents " + r.getInsertedIds().size());
-        }
+        log.info("inserting into mongodb.futures.m1 " + history);
+        var collection = newTimeSeriesCollection(false);
+        var r = insert(collection, history);
+        log.info("inserted documents " + r.getInsertedIds().size());
     }
 
     public void append(PriceHistory history) {
-        log.info("inserting into " + connectionString + " futures/m1 " + history);
-        try (MongoClient mongoClient = createClient()) {
-            MongoDatabase db = mongoClient.getDatabase("futures");
-//            createTimeSeriesCollection(db, "m1", "symbol", "timestamp");
-//            MongoCollection<Document> m1 = db.getCollection("m1");
-//            insert(m1, history);
-            var collection = db.getCollection("m1");
-            LocalDateTime last = removeExistingWithDifferentVol(collection, history);
-            log.info("inserting rows after " + last);
-            insert(collection, history, last);
-        }
+        log.info("inserting into mongodb.futures.m1 " + history);
+        var collection = getCollection();
+        LocalDateTime last = removeExistingWithDifferentVol(collection, history);
+        log.info("inserting rows after " + last);
+        insert(collection, history, last);
     }
 
     // last bar in time series may be incomplete
@@ -161,7 +120,7 @@ public class TimeSeriesRepository {
         LocalDateTime dt = null;
         while (dt == null) {
             var lastDoc = collection.find(Filters.eq("symbol", history.getSymbolLowerCase())).sort(Sorts.descending("timestamp")).first();
-            var timestamp = getLocalDateTime(lastDoc, "timestamp");
+            var timestamp = asLocalDateTime(lastDoc, "timestamp");
             var bar = history.bar(timestamp);
             if (!DoubleMath.fuzzyEquals(lastDoc.getDouble("volume"), bar.volume(), 1e-6)) {
                 log.info("deleting time series timestamp=" + timestamp);
@@ -173,14 +132,26 @@ public class TimeSeriesRepository {
         return dt;
     }
 
-    @Nullable LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol) {
+    @Nullable
+    LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol) {
         var item = collection.find(Filters.eq("symbol", symbol)).sort(Sorts.descending("timestamp")).projection(Projections.include("timestamp")).first();
-        return getLocalDateTime(item, "timestamp");
+        return asLocalDateTime(item, "timestamp");
     }
 
-    PriceHistory load(String symbol, LocalDate tradeDate) {
-        var xs = loadImpl(symbol, tradeDate);
-        var history = new PriceHistory(symbol, xs.size(), "date", "open", "high", "low", "close", "volume", "vwap");
+
+    PriceHistory loadSingleDay(String symbol, LocalDateTime start) {
+        return makePriceHistory(loadBetween(symbol, start.atZone(UTC).toInstant(), start.plusDays(1).atZone(UTC).toInstant()));
+    }
+
+    PriceHistory loadSingleDay(String symbol, LocalDate tradeDate) {
+        var end = tradeDate.atTime(23, 0);
+        var iEnd = end.atZone(UTC).toInstant();
+        var iStart = end.minusDays(1).atZone(UTC).toInstant();
+        return makePriceHistory(loadBetween(symbol, iStart, iEnd));
+    }
+
+    PriceHistory makePriceHistory(List<PriceBarM> xs) {
+        var history = new PriceHistory(xs.get(0).symbol(), xs.size(), "date", "open", "high", "low", "close", "volume", "vwap");
         int i = 0;
         for (var x : xs) {
             history.insert(i++, x.timestamp(), x.open(), x.high(), x.low(), x.close(), x.volume(), x.vwap());
@@ -195,20 +166,14 @@ public class TimeSeriesRepository {
         timestamp: {$gte: ISODate("2023-03-08T23:00:00Z"), $lt: ISODate("2023-03-09T23:00:00Z")}
     }
      */
-    List<PriceBarM> loadImpl(String symbol, LocalDate tradeDate) {
-        try (MongoClient mongoClient = createClient()) {
-            MongoDatabase db = mongoClient.getDatabase("futures");
-            var collection = db.getCollection("m1", PriceBarM.class);
-            var end = tradeDate.atTime(23, 0);
-            var iEnd = end.atZone(UTC).toInstant();
-            var iStart = end.minusDays(1).atZone(UTC).toInstant();
+    private ArrayList<PriceBarM> loadBetween(String symbol, Instant iStart, Instant iEndExclusive) {
+        log.info("loadBetween " + symbol + " [" + iStart + ", " + iEndExclusive + ")");
+        var fSymbol = Filters.eq("symbol", symbol);
+        var fStart = Filters.gte("timestamp", Date.from(iStart));
+        var fEnd = Filters.lt("timestamp", Date.from(iEndExclusive));
+        var filter = Filters.and(fSymbol, fStart, fEnd);
 
-            var fSymbol = Filters.eq("symbol", symbol);
-            var fStart = Filters.gte("timestamp", Date.from(iStart));
-            var fEnd = Filters.lt("timestamp", Date.from(iEnd));
-            var filter = Filters.and(fSymbol, fStart, fEnd);
-            return collection.find(filter).into(new ArrayList<>());
-        }
+        return db.get().getCollection(collectionName, PriceBarM.class).find(filter).into(new ArrayList<>());
     }
 
     private InsertManyResult insert(MongoCollection<Document> m1, PriceHistory history) {
@@ -267,30 +232,50 @@ public class TimeSeriesRepository {
           end: { $last : "$timestamp" }
         }
      */
-    private List<Summary> summary(MongoCollection<Document> collection) {
+    List<Summary> summary() {
+        var collection = db.get().getCollection(collectionName, Summary.class);
         // sum(returned field name, expression - typically "$field_name"
-        var xs = collection.aggregate(List.of(
-//                Aggregates.match(Filters.eq("symbol", "esz3")),
+        return collection.aggregate(List.of(
                 Aggregates.group("$symbol", List.of(
                         Accumulators.sum("count", 1),
                         Accumulators.max("high", "$high"),
                         Accumulators.min("low", "$low"),
                         Accumulators.first("start", "$timestamp"),
-                        Accumulators.last("end", "$timestamp")
-                ))
+                        Accumulators.last("end", "$timestamp"))),
+                Aggregates.sort(Sorts.ascending("start"))
         )).into(new ArrayList<>());
-        return xs.stream().map(Summary::newSummary).toList();
     }
 
-    record Summary(String symbol, int count, LocalDateTime start, LocalDateTime end, double high, double low) {
-        static Summary newSummary(Document d) {
-            return new Summary(
-                    d.getString("_id"),
-                    d.getInteger("count"),
-                    getLocalDateTime(d, "start"),
-                    getLocalDateTime(d, "end"),
-                    d.getDouble("high"),
-                    d.getDouble("low"));
+    public void close() {
+        client.get().close();
+    }
+
+    public record Summary(@BsonId String symbol, int count, double high, double low, Date start, Date end) {
+    }
+
+    /**
+     * return list of first bar after a gap of 30 minutes. does not include first bar of collection
+     */
+    List<LocalDateTime> queryDayStartTimes(String symbol) {
+        var window = WindowOutputFields.of(
+                WindowOutputFields.shift("lastTm", "$timestamp", null, -1).toBsonField());
+        Bson fields = Projections.fields(
+                Projections.excludeId(),
+                Projections.include("timestamp", "lastTm"),
+                Projections.computed("gap", BsonDocument.parse("{$dateDiff:{startDate: \"$lastTm\",endDate: \"$timestamp\",unit: \"minute\"}}")));
+        try (var c = getCollection().aggregate(List.of(
+                        Aggregates.match(Filters.eq("symbol", symbol)),
+                        Aggregates.setWindowFields(null, Sorts.ascending("timestamp"), window),
+                        Aggregates.project(fields),
+                        Aggregates.match(Filters.gte("gap", 30))))
+                .cursor()) {
+            List<LocalDateTime> xs = new ArrayList<>();
+            while (c.hasNext()) {
+                Document d = c.next();
+                xs.add(asLocalDateTime(d, "timestamp"));
+            }
+            log.info(xs);
+            return xs;
         }
     }
 }
