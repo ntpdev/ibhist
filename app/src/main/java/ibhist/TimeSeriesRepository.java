@@ -12,7 +12,6 @@ import com.mongodb.client.model.*;
 import com.mongodb.client.result.InsertManyResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.pojo.PojoCodecProvider;
@@ -35,7 +34,6 @@ import java.util.function.Supplier;
 
 public class TimeSeriesRepository {
     private static final Logger log = LogManager.getLogger("TimeSeriesRepository");
-
     public static final ZoneId UTC = ZoneId.of("UTC");
     private final String connectionString;
     private final String collectionName;
@@ -60,22 +58,21 @@ public class TimeSeriesRepository {
         return db.get().getCollection(collectionName);
     }
 
+    private <T> MongoCollection<T> getCollection(Class<T> clz) {
+        return db.get().getCollection(collectionName, clz);
+    }
+
     /**
      * drop existing collection if it exists and create a new time series collection
      */
-    MongoCollection<Document> newTimeSeriesCollection(boolean fNew) {
+    void newTimeSeriesCollection() {
         try {
             var c = getCollection();
-            if (fNew) {
-                c.drop();
-            } else {
-                return c;
-            }
+            c.drop();
         } catch (IllegalArgumentException e) {
             log.error(e);
         }
         createTimeSeriesCollection("symbol", "timestamp");
-        return getCollection();
     }
 
     void createTimeSeriesCollection(String metaName, String timestampName) {
@@ -93,17 +90,9 @@ public class TimeSeriesRepository {
         return dt == null ? null : LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), ZoneId.of("UTC"));
     }
 
-    void insert(MongoCollection<Document> collection) {
-        var instant = Instant.now();
-        var d1 = new Document("timestamp", Date.from(instant)).append("symbol", "sym1").append("open", 1235.56d);
-        var d2 = new Document("timestamp", Date.from(instant)).append("symbol", "sym2").append("open", 1237.6d);
-        InsertManyResult insertManyResult = collection.insertMany(List.of(d1, d2));
-    }
-
     public void insert(PriceHistory history) {
         log.info("inserting into mongodb.futures.m1 " + history);
-        var collection = newTimeSeriesCollection(false);
-        var r = insert(collection, history);
+        var r = insert(getCollection(), history);
         log.info("inserted documents " + r.getInsertedIds().size());
     }
 
@@ -191,7 +180,7 @@ public class TimeSeriesRepository {
         List<Document> rows = new ArrayList<>(dates.length);
         int start = lastExisting == null ? 0 : Math.max(0, history.find(lastExisting));
         for (int i = start; i < dates.length; i++) {
-            if (lastExisting != null && dates[i].isAfter(lastExisting)) {
+            if (lastExisting == null || dates[i].isAfter(lastExisting)) {
                 var d = new Document("symbol", history.getSymbolLowerCase())
                         .append("timestamp", dates[i])
                         .append("open", opens[i])
@@ -225,7 +214,7 @@ public class TimeSeriesRepository {
     }
 
     /* equivalent aggregation pipeline
-        {
+        $group: {
           _id: "$symbol",
           count: { $sum : 1 },
           start: { $first : "$timestamp" },
@@ -233,15 +222,18 @@ public class TimeSeriesRepository {
         }
      */
     List<Summary> summary() {
-        var collection = db.get().getCollection(collectionName, Summary.class);
+        var collection = getCollection(Summary.class);
         // sum(returned field name, expression - typically "$field_name"
         return collection.aggregate(List.of(
-                Aggregates.group("$symbol", List.of(
+                Aggregates.group(
+                        // id field
+                        "$symbol",
+                        // aggregates
                         Accumulators.sum("count", 1),
                         Accumulators.max("high", "$high"),
                         Accumulators.min("low", "$low"),
                         Accumulators.first("start", "$timestamp"),
-                        Accumulators.last("end", "$timestamp"))),
+                        Accumulators.last("end", "$timestamp")),
                 Aggregates.sort(Sorts.ascending("start"))
         )).into(new ArrayList<>());
     }
@@ -250,8 +242,7 @@ public class TimeSeriesRepository {
         client.get().close();
     }
 
-    public record Summary(@BsonId String symbol, int count, double high, double low, Date start, Date end) {
-    }
+    public record Summary(@BsonId String symbol, int count, double high, double low, Date start, Date end) {}
 
     /**
      * return list of first bar after a gap of 30 minutes. does not include first bar of collection
@@ -262,7 +253,8 @@ public class TimeSeriesRepository {
         Bson fields = Projections.fields(
                 Projections.excludeId(),
                 Projections.include("timestamp", "lastTm"),
-                Projections.computed("gap", BsonDocument.parse("{$dateDiff:{startDate: \"$lastTm\",endDate: \"$timestamp\",unit: \"minute\"}}")));
+                Projections.computed("gap", new Document("$dateDiff", new Document("startDate", "$lastTm").append("endDate", "$timestamp").append("unit", "minute"))));
+        // compute difference in minutes {$dateDiff:{startDate: "$lastTm",endDate: "$timestamp",unit: "minute"} }
         try (var c = getCollection().aggregate(List.of(
                         Aggregates.match(Filters.eq("symbol", symbol)),
                         Aggregates.setWindowFields(null, Sorts.ascending("timestamp"), window),
@@ -277,5 +269,24 @@ public class TimeSeriesRepository {
             log.info(xs);
             return xs;
         }
+    }
+
+    public record DayVolume(@BsonId Date date, int count, double volume) {}
+
+    /**
+     * find days with total volume >minVol
+     */
+    List<DayVolume> queryDaysWithVolume(String symbol, double minVol) {
+        return getCollection(DayVolume.class).aggregate(List.of(
+                Aggregates.match((Filters.eq("symbol", symbol))),
+                Aggregates.group(
+                        // id - groupBy fields {$dateTrunc: {date: "$timestamp", unit: "day"} }
+                        new Document("$dateTrunc", new Document("date", "$timestamp").append("unit", "day")),
+                        // aggregration fields in group
+                        Accumulators.sum("count", 1),
+                        Accumulators.sum("volume", "$volume")),
+                Aggregates.match(Filters.gte("volume", minVol)),
+                Aggregates.sort(Sorts.ascending("_id"))
+        )).into(new ArrayList<>());
     }
 }

@@ -47,7 +47,7 @@ public class App {
         sleep(1_000);
         m_client.reqCurrentTime();
         getHistoricalData("ES", "202312", Duration.DAY_5);
-//        getHistoricalData("NQ", "202312", Duration.DAY_5);
+        getHistoricalData("NQ", "202312", Duration.DAY_5);
 //        sleep(30_000);
         m_client.eDisconnect();
         sleep(1_000);
@@ -123,8 +123,7 @@ public class App {
             var vwap = history.vwap("vwap");
             var index = history.index();
             var entry = index.entries().get(0);
-//            var index2 = history.index();
-//            action.save(entry.tradeDate());
+            action.save(entry.tradeDate());
             TimeSeriesRepository repository = new TimeSeriesRepository(CONNECTION_STRING, DATABASE_NAME, COLLECTION_NAME);
             repository.append(history);
         }

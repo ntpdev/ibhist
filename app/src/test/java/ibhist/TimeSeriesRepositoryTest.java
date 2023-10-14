@@ -6,6 +6,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
+import java.util.List;
+
 class TimeSeriesRepositoryTest {
     public static final String CONNECTION_STRING = "mongodb://localhost:27017";
     public static final String DATABASE_NAME = "futures";
@@ -27,8 +30,21 @@ class TimeSeriesRepositoryTest {
     void test_summary() {
         log.info(repository.summary());
         var days = repository.queryDayStartTimes("esz3");
+        var days2 = repository.queryDaysWithVolume("esz3", 100_000);
         var history = repository.loadSingleDay("esz3", days.get(days.size() - 1));
         log.info(history);
         log.info(history.index().entries().get(0));
+    }
+
+    @Test
+    void test_newCollectionLoadAll() {
+        var xs = List.of("esh3", "esm3", "esu3", "esz3", "nqz3");
+        repository.newTimeSeriesCollection();
+        var phr = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        for (String s : xs) {
+            var history = phr.load(s);
+            history.vwap("vwap");
+            repository.insert(history);
+        }
     }
 }

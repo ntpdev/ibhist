@@ -2,6 +2,8 @@ package ibhist;
 
 import com.ib.client.Bar;
 import com.ib.client.Decimal;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -13,6 +15,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PriceHistoryRepositoryTest {
+    private static final Logger log = LogManager.getLogger("PriceHistoryRepositoryTest");
 
     @Test
     void test_loadAllDays() {
@@ -31,6 +34,9 @@ class PriceHistoryRepositoryTest {
 //        TimeSeriesRepository tsr = new TimeSeriesRepository("mongodb://localhost:27017");
 //        tsr.append(history);
         var rthBars = history.rthBars();
+        for (PriceHistory.Bar bar : rthBars) {
+            log.info(bar.asDailyBar());
+        }
         var minVol = history.minVolBars(2500d);
         save(minVol);
     }

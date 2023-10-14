@@ -1,6 +1,5 @@
 package ibhist;
 
-import com.google.common.base.Suppliers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -9,7 +8,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.function.Supplier;
 
 public class PriceHistory implements Serializable {
     private static final Logger log = LogManager.getLogger("PriceHistory");
@@ -17,7 +15,7 @@ public class PriceHistory implements Serializable {
     private final String symbol;
     LocalDateTime[] dates;
     List<Column> columns = new ArrayList<>();
-    transient Supplier<Index> index;
+    private transient Index index = null;
 
     PriceHistory(String symbol, int size, String... names) {
         this.symbol = symbol;
@@ -219,9 +217,9 @@ public class PriceHistory implements Serializable {
 
     public Index index() {
         if (index == null) {
-            index = Suppliers.memoize(Index::new);
+            index = new Index();
         }
-        return index.get();
+        return index;
     }
 
     List<Bar> dailyBars() {
