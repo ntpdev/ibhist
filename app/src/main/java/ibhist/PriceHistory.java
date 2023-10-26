@@ -132,23 +132,22 @@ public class PriceHistory implements Serializable {
 
     // add vwap col
     Column vwap(String name) {
-        var highs = getColumn("high");
-        var lows = getColumn("low");
+        var mids = average("high", "low", "mid");
         var vols = getColumn("volume");
         var c = new Column(name, length());
         double cumVol = 0;
-        double totalVwap = 0;
+        double totalPV = 0;
         var lastDt = dates[0];
         for (int i = 0; i < length(); i++) {
             if (ChronoUnit.MINUTES.between(lastDt, dates[i]) >= 30) {
                 cumVol = 0;
-                totalVwap = 0;
+                totalPV = 0;
             }
 
             double vol = vols[i];
             cumVol += vol;
-            totalVwap += vol * (highs[i] + lows[i]) * .5d;
-            c.values[i] = totalVwap / cumVol;
+            totalPV += vol * mids.values[i];
+            c.values[i] = totalPV / cumVol;
             lastDt = dates[i];
         }
         columns.add(c);
@@ -175,8 +174,9 @@ public class PriceHistory implements Serializable {
                 columns.get(5).values[i]);
     }
 
-    public Bar bar(LocalDateTime d) {
-        return bar(find(d));
+    public Optional<Bar> bar(LocalDateTime d) {
+        int idx = find(d);
+        return idx < 0 ? Optional.empty() : Optional.of(bar(idx));
     }
 
     public Bar aggregrate(int start, int inclusiveEnd) {
@@ -286,44 +286,40 @@ public class PriceHistory implements Serializable {
             LocalDateTime[] dates = PriceHistory.this.getDates();
             int start = 0;
             int lastIdx = dates.length - 1;
-            for (int i = 0; i < dates.length; i++) {
+            for (int i = 0; i <= lastIdx; i++) {
                 if (i == lastIdx || ChronoUnit.MINUTES.between(dates[i], dates[i + 1]) >= 30) {
                     indexEntries.add(createIndexEntry(dates, start, i));
                     start = i + 1;
                 }
             }
-            makeMessages(indexEntries.get(0));
         }
 
-        public NavigableMap<Long, String> makeMessages(IndexEntry e) {
+        public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
-            for (IndexEntry idx : indexEntries) {
-                var b = aggregrate(idx.start(), idx.end());
-                putMessage(priceMessages, b.open(), "%.2f glbx open");
-                putMessage(priceMessages, b.close(), "%.2f last");
-                var c = PriceHistory.this.getColumn("vwap");
-                putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
-                var glbx = aggregrate(idx.start(), idx.euEnd());
-                putMessage(priceMessages, glbx.high(), "%.2f glbx hi");
-                putMessage(priceMessages, glbx.low(), "%.2f glbx lo");
+            var b = aggregrate(idx.start(), idx.end());
+            putMessage(priceMessages, b.open(), "%.2f glbx open");
+            putMessage(priceMessages, b.close(), "%.2f last");
+            var c = PriceHistory.this.getColumn("vwap");
+            putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
-                if (idx.euStart() >= 0) {
-                    var eu = aggregrate(idx.euStart(), idx.euEnd());
-                    putMessage(priceMessages, eu.open(), "%.2f eu open");
-                }
+            var glbx = aggregrate(idx.start(), idx.euEnd());
+            putMessage(priceMessages, glbx.high(), "%.2f glbx hi");
+            putMessage(priceMessages, glbx.low(), "%.2f glbx lo");
 
-                if (idx.rthStart() >= 0) {
-                    var rth = aggregrate(idx.rthStart(), idx.rthEnd());
-                    putMessage(priceMessages, rth.open(), "%.2f open");
-                    putMessage(priceMessages, rth.high(), "%.2f high");
-                    putMessage(priceMessages, rth.low(), "%.2f low");
-                    var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
-                    putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
-                    putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");
-                }
-                logIntradayInfo(priceMessages);
-                return priceMessages;
+            if (idx.euStart() >= 0) {
+                var eu = aggregrate(idx.euStart(), idx.euEnd());
+                putMessage(priceMessages, eu.open(), "%.2f eu open");
+            }
+
+            if (idx.rthStart() >= 0) {
+                var rth = aggregrate(idx.rthStart(), idx.rthEnd());
+                putMessage(priceMessages, rth.open(), "%.2f open");
+                putMessage(priceMessages, rth.high(), "%.2f high");
+                putMessage(priceMessages, rth.low(), "%.2f low");
+                var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
+                putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
+                putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");
             }
             return priceMessages;
         }
@@ -338,11 +334,12 @@ public class PriceHistory implements Serializable {
             return existing;
         }
 
-        private void logIntradayInfo(NavigableMap<Long, String> map) {
-            //TODO can replace with JDK21 SequencedMap reversed().values()
-            for (String s : map.descendingMap().values()) {
-                log.info(s);
+        public String logIntradayInfo(NavigableMap<Long, String> map) {
+            var sb = new StringBuilder();
+            for (String s : map.reversed().values()) {
+                sb.append(s).append(System.lineSeparator());
             }
+            return sb.toString();
         }
 
         private IndexEntry createIndexEntry(LocalDateTime[] dates, int start, int endInclusive) {

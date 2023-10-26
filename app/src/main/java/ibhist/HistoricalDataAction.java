@@ -61,12 +61,16 @@ public class HistoricalDataAction extends ActionBase {
 
     public PriceHistory getPriceHistory() {
         var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        return repository.loadFromIBBars(contract.localSymbol(), bars);
+        return repository.loadFromIBBars(getSymbol(), bars);
+    }
+
+    private String getSymbol() {
+        return contract.localSymbol() == null ? contract.symbol() : contract.localSymbol();
     }
 
     public void save(LocalDate startDate) {
         try {
-            String fname = "z" + contract.localSymbol() + " " + startDate.format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv";
+            String fname = "z" + getSymbol() + " " + startDate.format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv";
             var p = Path.of("c:\\temp\\ultra\\", fname);
             log.info("saving file " + p);
             Files.writeString(p, getBarsAsCsv());

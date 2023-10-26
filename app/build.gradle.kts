@@ -32,15 +32,14 @@ dependencies {
     // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync
     implementation("org.mongodb:mongodb-driver-sync:4.10.2")
 
-
-    // add all jar files in lib dir
+    // add all jar files in lib dir twsapi.jar
     implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.jar"))))
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 

@@ -111,7 +111,7 @@ public class TimeSeriesRepository {
             var lastDoc = collection.find(Filters.eq("symbol", history.getSymbolLowerCase())).sort(Sorts.descending("timestamp")).first();
             var timestamp = asLocalDateTime(lastDoc, "timestamp");
             var bar = history.bar(timestamp);
-            if (!DoubleMath.fuzzyEquals(lastDoc.getDouble("volume"), bar.volume(), 1e-6)) {
+            if (bar.isPresent() && !DoubleMath.fuzzyEquals(lastDoc.getDouble("volume"), bar.get().volume(), 1e-6)) {
                 log.info("deleting time series timestamp=" + timestamp);
                 collection.deleteOne(Filters.and(Filters.eq("symbol", lastDoc.getString("symbol")), Filters.eq("timestamp", lastDoc.getDate("timestamp"))));
             } else {

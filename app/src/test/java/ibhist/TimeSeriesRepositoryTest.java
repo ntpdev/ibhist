@@ -29,11 +29,11 @@ class TimeSeriesRepositoryTest {
     @Test
     void test_summary() {
         log.info(repository.summary());
-        var days = repository.queryDayStartTimes("esz3");
+        var startTimes = repository.queryDayStartTimes("esz3");
         var days2 = repository.queryDaysWithVolume("esz3", 100_000);
-        var history = repository.loadSingleDay("esz3", days.get(days.size() - 1));
+        var history = repository.loadSingleDay("esz3", startTimes.getLast());
         log.info(history);
-        log.info(history.index().entries().get(0));
+        log.info(history.index().entries().getFirst());
     }
 
     @Test

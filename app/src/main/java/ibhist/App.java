@@ -46,8 +46,9 @@ public class App {
         new Thread(App::connectionThread).start();
         sleep(1_000);
         m_client.reqCurrentTime();
+//        getHistoricalIndexData("TICK-NYSE", "NYSE", Duration.DAY_5);
         getHistoricalData("ES", "202312", Duration.DAY_5);
-        getHistoricalData("NQ", "202312", Duration.DAY_5);
+//        getHistoricalData("NQ", "202312", Duration.DAY_5);
 //        sleep(30_000);
         m_client.eDisconnect();
         sleep(1_000);
@@ -62,6 +63,17 @@ public class App {
             requestHistoricalData(action.getContract(),  duration);
             var hdAction = takeFromQueue(HistoricalDataAction.class);
             processHistoricalData(hdAction);
+        } catch (InterruptedException e) {
+            log.error(e);
+        }
+    }
+
+    private static void getHistoricalIndexData(String symbol, String exchange, Duration duration) {
+        try {
+            var contract = newIndex(symbol, exchange);
+            requestHistoricalData(contract,  duration);
+            var hdAction = takeFromQueue(HistoricalDataAction.class);
+            processHistoricalIndexData(hdAction);
         } catch (InterruptedException e) {
             log.error(e);
         }
@@ -104,8 +116,7 @@ public class App {
     private static void sleep(int millis) {
         try {
             Thread.sleep(millis);
-        } catch (InterruptedException ignored) {
-        }
+        } catch (InterruptedException ignored) {}
     }
 
     private static void processContractDetails(ContractDetailsAction action) {
@@ -122,10 +133,22 @@ public class App {
             var history = action.getPriceHistory();
             var vwap = history.vwap("vwap");
             var index = history.index();
-            var entry = index.entries().get(0);
-            action.save(entry.tradeDate());
+            var entry = index.entries().getLast();
+            log.info(index.logIntradayInfo(index.makeMessages(entry)));
+//            action.save(index.entries().getFirst().tradeDate());
             TimeSeriesRepository repository = new TimeSeriesRepository(CONNECTION_STRING, DATABASE_NAME, COLLECTION_NAME);
             repository.append(history);
+        }
+    }
+
+    private static void processHistoricalIndexData(HistoricalDataAction action) {
+        var bars = action.getBars();
+        var contract = action.getContract();
+        log.info("processHistoricalData " + bars.size());
+        if (!bars.isEmpty()) {
+            log.info(contract.symbol() + " bars from " + bars.get(0).time() + " to " + bars.get(bars.size() - 1).time());
+            var history = action.getPriceHistory();
+            action.save(history.getDates()[0].toLocalDate());
         }
     }
 
@@ -138,6 +161,15 @@ public class App {
         contract.currency("USD");
         contract.exchange("CME");
         //! [futcontract]
+        return contract;
+    }
+
+    public static Contract newIndex(String symbol, String exchange) {
+        Contract contract = new Contract();
+        contract.symbol(symbol);
+        contract.secType("IND");
+        contract.currency("USD");
+        contract.exchange(exchange);
         return contract;
     }
 }
