@@ -17,16 +17,18 @@ repositories {
 
 dependencies {
     // Use JUnit Jupiter for testing.
-    testImplementation("org.junit.jupiter:junit-jupiter:5.9.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     // https://mvnrepository.com/artifact/org.assertj/assertj-core
-    testImplementation("org.assertj:assertj-core:3.24.2")
+    testImplementation("org.assertj:assertj-core:3.25.3")
     // https://mvnrepository.com/artifact/org.mockito/mockito-core
-    testImplementation("org.mockito:mockito-core:5.5.0")
+    testImplementation("org.mockito:mockito-core:5.10.0")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // This dependency is used by the application.
-    implementation("com.google.guava:guava:32.1.2-jre")
+    implementation("com.google.guava:guava:33.0.0-jre")
+    // https://mvnrepository.com/artifact/com.google.inject/guice
+    implementation("com.google.inject:guice:7.0.0")
     // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
     implementation("org.apache.logging.log4j:log4j-core:2.20.0")
     // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync

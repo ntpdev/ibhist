@@ -3,6 +3,7 @@ package ibhist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -206,8 +207,8 @@ public class PriceHistory implements Serializable {
         return aggregrate(e.start(), e.end());
     }
 
-    public Bar aggregrateRth(IndexEntry e) {
-        return aggregrate(e.rthStart(), e.rthEnd());
+    public @Nullable Bar aggregrateRth(IndexEntry e) {
+        return e.rthStart() >= 0 && e.isComplete() ? aggregrate(e.rthStart(), e.rthEnd()) : null;
     }
 
     // inclusive end dates
@@ -227,7 +228,11 @@ public class PriceHistory implements Serializable {
     }
 
     List<Bar> rthBars() {
-        return index().indexEntries.stream().map(PriceHistory.this::aggregrateRth).toList();
+        // use mapMulti rather than map index -> Optional<Bar> then filter empty -> then map to extract value
+        // note either explicit types on lambda required or add type to mapMulti
+        return index().indexEntries.stream()
+                .<Bar>mapMulti((e, consumer) -> { var b = aggregrateRth(e); if (b != null) consumer.accept(b); })
+                .toList();
     }
 
     List<Bar> minVolBars(double minVol) {
@@ -271,6 +276,31 @@ public class PriceHistory implements Serializable {
         return q;
     }
 
+    int[] firstBars(boolean first, int minGap) {
+        var idx = new int[128];
+        int c = 0;
+        LocalDateTime last = null;
+        for (int i = 0; i < dates.length; i++) {
+            var date = dates[i];
+            if ((last != null && ChronoUnit.MINUTES.between(last, date) > minGap) ||
+                (last == null && first)) {
+                idx[c++] = i;
+            }
+            last = date;
+        }
+        return Arrays.copyOf(idx, c);
+    }
+
+    int[] lastBars(int[] idxs) {
+        int len = idxs.length;
+        var ends = Arrays.copyOfRange(idxs, 1, len+1);
+        ends[len -1] = dates.length;
+        for (int i = 0; i < ends.length; i++) {
+            ends[i] = ends[i] - 1;
+        }
+        return ends;
+    }
+
     @Override
     public String toString() {
         return "PriceHistory[symbol=" + symbol +
@@ -284,14 +314,27 @@ public class PriceHistory implements Serializable {
 
         private Index() {
             LocalDateTime[] dates = PriceHistory.this.getDates();
-            int start = 0;
-            int lastIdx = dates.length - 1;
-            for (int i = 0; i <= lastIdx; i++) {
-                if (i == lastIdx || ChronoUnit.MINUTES.between(dates[i], dates[i + 1]) >= 30) {
-                    indexEntries.add(createIndexEntry(dates, start, i));
-                    start = i + 1;
-                }
+            var starts = PriceHistory.this.firstBars(true, 1);
+            var ends = PriceHistory.this.lastBars(starts);
+            for (int i = 0; i < starts.length; i++) {
+                indexEntries.add(createIndexEntry(dates, starts[i], ends[i]));
             }
+        }
+
+        private IndexEntry createIndexEntry(LocalDateTime[] dates, int start, int endInclusive) {
+            // eu start +9:00 +540 rth start +15:30 +930 from glbx open of 23:00
+            int euStart = start + 540 < endInclusive ? start + 540 : -1;
+            int rthStart = start + 930 < endInclusive ? start + 930 : -1;
+            int rthEnd = start + 1319 < endInclusive ? start + 1319 : -1;
+            return new IndexEntry(
+                    rthStart > 0 ? dates[rthStart].toLocalDate() : dates[start].toLocalDate().plusDays(1),
+                    start,
+                    endInclusive,
+                    euStart,
+                    rthStart > 0 ? rthStart - 1 : -1,
+                    rthStart,
+                    rthEnd,
+                    rthEnd > 0);
         }
 
         public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
@@ -323,8 +366,8 @@ public class PriceHistory implements Serializable {
             }
             return priceMessages;
         }
-
         // add message for price level, concatenate with any existing message for same price
+
         private String putMessage(NavigableMap<Long, String> map, double price, String fmt) {
             String msg = String.format(fmt, price);
             long key = Math.round(price * 100);
@@ -342,22 +385,6 @@ public class PriceHistory implements Serializable {
             return sb.toString();
         }
 
-        private IndexEntry createIndexEntry(LocalDateTime[] dates, int start, int endInclusive) {
-            // eu start +9:00 +540 rth start +15:30 +930 from glbx open of 23:00
-            int euStart = start + 540 < dates.length ? start + 540 : -1;
-            int rthStart = start + 930 < dates.length ? start + 930 : -1;
-            int rthEnd = start + 1319 < dates.length ? start + 1319 : -1;
-            return new IndexEntry(
-                    rthStart > 0 ? dates[rthStart].toLocalDate() : dates[start].toLocalDate().plusDays(1),
-                    start,
-                    endInclusive,
-                    euStart,
-                    rthStart > 0 ? rthStart - 1 : -1,
-                    rthStart,
-                    rthEnd,
-                    rthEnd > 0);
-        }
-
         List<IndexEntry> entries() {
             return Collections.unmodifiableList(indexEntries);
         }
@@ -373,7 +400,7 @@ public class PriceHistory implements Serializable {
     public record Bar(LocalDateTime start, LocalDateTime end, double open, double high, double low,
                       double close, double volume, double vwap) {
         public String asDailyBar() {
-            return String.format("%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f", start.toLocalDate(), open, high, low, close, volume, vwap);
+            return String.format("%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f", end.toLocalDate(), open, high, low, close, volume, vwap);
         }
     }
 

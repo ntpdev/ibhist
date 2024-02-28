@@ -48,6 +48,9 @@ class PriceHistoryRepositoryTest {
         assertThat(history.length()).isEqualTo(13800);
         var c = history.vwap("vwap");
         assertThat(c.values.length).isEqualTo(history.length());
+        var startIndexes = history.firstBars(true, 1);
+        var endIndexes = history.lastBars(startIndexes);
+        assertThat(startIndexes.length).isEqualTo(endIndexes.length);
         var rthBars = history.rthBars();
         assertThat(rthBars).hasSize(10);
         for (PriceHistory.Bar bar : rthBars) {
