@@ -5,6 +5,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.DateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 public class EWrapperImpl implements EWrapper {
@@ -177,10 +179,10 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void historicalDataUpdate(int i, Bar bar) {
-        log.info("historicalDataUpdate " + i);
+//        log.info("historicalDataUpdate " + i);
         if (actions.get(i) instanceof HistoricalDataAction a) {
-            log.info(bar.time() + " " + bar.close());
-//            a.process(bar);
+//            log.info(bar.time() + " " + bar.close());
+            a.processUpdate(bar);
         }
     }
 
@@ -188,8 +190,7 @@ public class EWrapperImpl implements EWrapper {
     public void historicalDataEnd(int i, String start, String end) {
         log.info("historicalDataEnd " + i + " " + start + " " + end);
         if (actions.get(i) instanceof HistoricalDataAction a) {
-//            log.info("found action in map");
-            a.process();
+            a.processEnd();
         }
     }
 
@@ -209,8 +210,11 @@ public class EWrapperImpl implements EWrapper {
     }
 
     @Override
-    public void realtimeBar(int i, long l, double v, double v1, double v2, double v3, Decimal decimal, Decimal decimal1, int i1) {
-
+    public void realtimeBar(int reqId, long time, double open, double high, double low, double close, Decimal volume, Decimal wap, int count) {
+        if (actions.get(reqId) instanceof RealTimeBarsAction a) {
+            var dt = LocalDateTime.ofInstant(new Date(time * 1000).toInstant(), ZoneId.of("UTC"));
+            a.process(new RealTimeBar(dt, open, high, low, close, volume.longValue(), wap.longValue()));
+        }
     }
 
     @Override

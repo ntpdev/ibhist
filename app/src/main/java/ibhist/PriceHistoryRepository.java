@@ -28,8 +28,8 @@ public class PriceHistoryRepository {
 
     private static final Logger log = LogManager.getLogger("PriceHistoryRepository");
     // will use Guava splitter rather than regex \s+
-    static final Splitter LINE_SPLITTER = Splitter.on(",").trimResults();
-    static final Splitter DATE_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();
+    static final Splitter COMMA_SPLITTER = Splitter.on(",").trimResults();
+    static final Splitter WS_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();
 
     private final Path root;
     private final String extension;
@@ -111,10 +111,10 @@ public class PriceHistoryRepository {
 
     PriceHistory loadFromIBBars(String symbol, List<Bar> bars) {
         PriceHistory priceHistory = new PriceHistory(symbol, bars.size(), "date", "open", "high", "low", "close", "volume");
-        int i = 0;
         for (Bar bar : bars) {
-            var dateParts = DATE_SPLITTER.splitToList(bar.time());
-            priceHistory.insert(i++, LocalDateTime.of(LocalDate.parse(dateParts.get(0), DateTimeFormatter.BASIC_ISO_DATE), LocalTime.parse(dateParts.get(1))), bar.open(), bar.high(), bar.low(), bar.close(), (int) bar.volume().longValue());
+            var dateParts = WS_SPLITTER.splitToList(bar.time());
+            priceHistory.add(LocalDateTime.of(LocalDate.parse(dateParts.get(0), DateTimeFormatter.BASIC_ISO_DATE), LocalTime.parse(dateParts.get(1))),
+                    bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
         }
         return priceHistory;
 
@@ -160,8 +160,8 @@ public class PriceHistoryRepository {
 
         //0,20221204  23:00:00,4102.5,4107.25,4102.5,4105.0,34,4103.65,13
         static IBCSV parse(String s) {
-            var xs = LINE_SPLITTER.splitToList(s);
-            var ds = DATE_SPLITTER.splitToList(xs.get(1));
+            var xs = COMMA_SPLITTER.splitToList(s);
+            var ds = WS_SPLITTER.splitToList(xs.get(1));
             var d = LocalDateTime.of(
                     LocalDate.parse(ds.get(0), DateTimeFormatter.BASIC_ISO_DATE),
                     LocalTime.parse(ds.get(1), DateTimeFormatter.ISO_LOCAL_TIME));

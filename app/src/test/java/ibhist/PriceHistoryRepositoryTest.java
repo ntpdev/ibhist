@@ -20,17 +20,19 @@ class PriceHistoryRepositoryTest {
     @Test
     void test_loadAllDays() {
         var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = repository.load("esz3");
+        var history = repository.load("esh4");
         var c = history.vwap("vwap");
+        var cMax = history.rollingMax("high", 5, "highm5");
         assertThat(c.values.length).isEqualTo(history.length());
-        LocalDateTime date = history.getDates()[9420];
+        var entry = history.indexEntry(-2);
+        LocalDateTime date = history.getDates()[entry.start()];
         int pos = history.find(date);
-        assertThat(pos).isEqualTo(9420);
+        assertThat(pos).isEqualTo(entry.start());
         var b = history.bar(pos);
-        pos = history.find(date.minusMinutes(1));
+        pos = history.find(date.minusMinutes(1)); // no exact match so returns -ve
         assertThat(pos).isLessThan(0);
         pos = history.floor(date.minusMinutes(1));
-        assertThat(pos).isEqualTo(9419);
+        assertThat(pos).isEqualTo(entry.start()-1);
 //        TimeSeriesRepository tsr = new TimeSeriesRepository("mongodb://localhost:27017");
 //        tsr.append(history);
         var rthBars = history.rthBars();

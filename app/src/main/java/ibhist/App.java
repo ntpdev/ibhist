@@ -13,6 +13,6 @@ public class App {
     public static void main(String[] args) {
         log.info(System.getProperty("java.version"));
         Guice.createInjector(new AppModule())
-            .getInstance(IBConnector.class).process();
+            .getInstance(IBConnector.class).process(true);
     }
 }

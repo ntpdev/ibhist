@@ -1,5 +1,5 @@
 package ibhist;
 
 public interface IBConnector {
-    void process();
+    void process(boolean fSingleDay);
 }
