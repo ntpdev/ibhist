@@ -115,6 +115,9 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         LocalDateTime dt = null;
         while (dt == null) {
             var lastDoc = collection.find(Filters.eq("symbol", history.getSymbolLowerCase())).sort(Sorts.descending("timestamp")).first();
+            if (lastDoc == null) {
+                return null;
+            }
             var timestamp = asLocalDateTime(lastDoc, "timestamp");
             var bar = history.bar(timestamp);
             if (bar.isPresent() && !DoubleMath.fuzzyEquals(lastDoc.getDouble("volume"), bar.get().volume(), 1e-6)) {
@@ -168,9 +171,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     PriceHistory makePriceHistory(List<PriceBarM> xs) {
         var history = new PriceHistory(xs.get(0).symbol(), xs.size(), "date", "open", "high", "low", "close", "volume", "vwap");
-        int i = 0;
         for (var x : xs) {
-            history.insert(i++, x.timestamp(), x.open(), x.high(), x.low(), x.close(), x.volume(), x.vwap());
+            history.add(x.timestamp(), x.open(), x.high(), x.low(), x.close(), x.volume(), x.vwap());
         }
         return history;
     }
@@ -189,7 +191,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         double[] vwaps = history.getColumn("vwap");
         List<Document> rows = new ArrayList<>(dates.length);
         int start = lastExisting == null ? 0 : Math.max(0, history.find(lastExisting));
-        for (int i = start; i < dates.length; i++) {
+        for (int i = start; i < history.length(); i++) {
             if (lastExisting == null || dates[i].isAfter(lastExisting)) {
                 var d = new Document("symbol", history.getSymbolLowerCase())
                         .append("timestamp", dates[i])

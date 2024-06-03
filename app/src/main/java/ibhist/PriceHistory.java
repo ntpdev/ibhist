@@ -78,7 +78,7 @@ public class PriceHistory implements Serializable {
             throw new IllegalArgumentException("lengths do not match " + xs.length);
         }
         var c = getColumn(name);
-        System.arraycopy(xs, 0, c, 0, length());
+        System.arraycopy(xs, 0, c, 0, xs.length);
         return c;
     }
 
@@ -123,18 +123,22 @@ public class PriceHistory implements Serializable {
         return this;
     }
 
+    public PriceHistory add(LocalDateTime date, double open, double high, double low, double close, double volume, double vwap) {
+        return insert(size, date, open, high, low, close, volume, vwap);
+    }
+
     public PriceHistory add(LocalDateTime date, double open, double high, double low, double close, double volume) {
         return insert(size, date, open, high, low, close, volume);
     }
 
-    public PriceHistory replaceLast(LocalDateTime date, double open, double high, double low, double close, double volume) {
-        int index = length() - 1;
-        dates[index] = date;
-        columns.get(0).values[index] = open;
-        columns.get(1).values[index] = high;
-        columns.get(2).values[index] = low;
-        columns.get(3).values[index] = close;
-        columns.get(4).values[index] = volume;
+    public PriceHistory replace(int index, LocalDateTime date, double open, double high, double low, double close, double volume) {
+        int i = index >= 0 ? index : length() + index;
+        dates[i] = date;
+        columns.get(0).values[i] = open;
+        columns.get(1).values[i] = high;
+        columns.get(2).values[i] = low;
+        columns.get(3).values[i] = close;
+        columns.get(4).values[i] = volume;
         return this;
     }
 
@@ -186,10 +190,6 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
-    private Column newColumn(String output) {
-        return new Column(output, max_size);
-    }
-
     // add vwap col
     Column vwap(String name) {
         var mids = average("high", "low", "mid");
@@ -213,7 +213,6 @@ public class PriceHistory implements Serializable {
         columns.add(c);
         return c;
     }
-
     Column rollingMax(String input, int n, String output) {
         return rollingImpl(input, n, output, true);
     }
@@ -223,10 +222,10 @@ public class PriceHistory implements Serializable {
     }
 
     private Column rollingImpl(String input, int n, String output, boolean isMax) {
-        double[] nums = getColumn(input);
+        var nums = getColumn(input);
         var c = newColumn(output);
         int[] dq = new int[length()]; // queue holding index of max in window
-        int head = 0;       // head will always point to current max in window
+        int head = 0;       // head will always point to current max/min in window
         int tail = 0;       // insertion point
         int window_trail = 0;
         for (int i = 0; i < length(); i++) {
@@ -259,6 +258,66 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
+    public Column hilo(String input, String output) {
+        double[] xs = getColumn(input);
+        var c = newColumn(output);
+        columns.add(c);
+        hiloImpl(xs, c.values, 0);
+        return c;
+    }
+    public void hiloImpl(double[] xs, double[] out, int start) {
+//        double[] xs = getColumn(input);
+//        var c = newColumn(output);
+//        double[] out = c.values;
+        double last = xs[start];
+        for (int i = start + 1; i < size; i++) {
+            double x = xs[i];
+            if (x > last) {
+                int k = i - 1;
+                while (k >= 0 && xs[k] < x) { k--; }
+                out[i] = i - k - 1;
+            } else if (x < last) {
+                int k = i - 1;
+                while (k >= 0 && xs[k] > x) { k--; }
+                out[i] = k + 1 - i;
+            } else {
+                out[i] = 0;
+            }
+            last = x;
+        }
+    }
+
+    private Column newColumn(String output) {
+        return new Column(output, max_size);
+    }
+
+    public String info() {
+        var sb = new StringBuilder();
+        for (int i = size - 5; i < size; i++) {
+            info(sb, i);
+        }
+        return sb.toString();
+    }
+
+    public void info(StringBuilder sb, int i) {
+        if (dates != null) {
+            sb.append(dates[i].toLocalTime());
+        }
+        for (var c : columns) {
+            sb.append(String.format(" %.2f", c.values[i]));
+        }
+        sb.append(System.lineSeparator());
+    }
+
+    public void recalc(int n) {
+        var lows = getColumn("low");
+        var lc = getColumn("lc");
+        hiloImpl(lows, lc, n >= 0 ? n : size + n);
+        var highs = getColumn("high");
+        var hc = getColumn("hc");
+        hiloImpl(highs, hc, n >= 0 ? n : size + n);
+    }
+
     public static class Column implements Serializable {
         final String name;
         final double[] values;
@@ -285,7 +344,6 @@ public class PriceHistory implements Serializable {
                     "name='" + name + '\'' +
                     ", length=" + values.length + '}';
         }
-//
 //        public Column(String name, double[] values) {
 //            this.name = name;
 //            this.values = values;
@@ -307,9 +365,20 @@ public class PriceHistory implements Serializable {
         return idx < 0 ? Optional.empty() : Optional.of(bar(idx));
     }
 
+    public String printBars(int n) {
+        int start = n >= 0 ? n : n + size;
+        int end = Math.min(start + 5, size);
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            sb.append(bar(i).asIntradayBar()).append(System.lineSeparator());
+        }
+        return sb.toString();
+    }
+
     public Bar aggregrate(int start, int inclusiveEnd) {
-        int end = inclusiveEnd >= 0 ? Math.min(inclusiveEnd, length() - 1) : length() + inclusiveEnd;
-        if (start > end) {
+        int s = start >= 0 ? start : length() + start;
+        int e = inclusiveEnd >= 0 ? Math.min(inclusiveEnd, length() - 1) : length() + inclusiveEnd;
+        if (start > e) {
             throw new IllegalArgumentException("Invalid array bounds " + start + " " + inclusiveEnd);
         }
 //        var dates = hist.getDates();
@@ -322,12 +391,12 @@ public class PriceHistory implements Serializable {
         double high = -1e6;
         double low = 1e6;
         double vol = 0;
-        for (int i = start; i <= end; i++) {
+        for (int i = s; i <= e; i++) {
             high = Math.max(highs[i], high);
             low = Math.min(lows[i], low);
             vol += volumes[i];
         }
-        return new Bar(dates[start], dates[end].plusMinutes(1), opens[start], high, low, closes[end], vol, vwaps[end]);
+        return new Bar(dates[s], dates[e].plusMinutes(1), opens[s], high, low, closes[e], vol, vwaps[e]);
     }
 
     public Bar aggregrateDaily(IndexEntry e) {
@@ -351,7 +420,7 @@ public class PriceHistory implements Serializable {
     }
 
     public IndexEntry indexEntry(int n) {
-        return index().indexEntries.get(n < 0 ? n + index().entries().size() : n);
+        return index().indexEntries.get(n >= 0 ? n  : n + index().entries().size());
     }
 
     List<Bar> dailyBars() {
@@ -444,10 +513,13 @@ public class PriceHistory implements Serializable {
         }
         var sb = new StringBuilder();
         var dates = getDates();
+        var opens = getColumn("open");
         var highs = getColumn("high");
-        var maxs = getColumn("highm5");
+        var lows = getColumn("low");
+        var closes = getColumn("close");
+//        var maxs = getColumn("highm5");
         for (int i = start; i < end; i++) {
-            sb.append(String.format("%s %.2f %.2f", dates[i].toLocalTime(), highs[i], maxs[i])).append(System.lineSeparator());
+            sb.append(String.format("%s %.2f %.2f %.2f %.2f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i])).append(System.lineSeparator());
         }
         return sb.toString();
     }
@@ -519,8 +591,8 @@ public class PriceHistory implements Serializable {
             }
             return priceMessages;
         }
-        // add message for price level, concatenate with any existing message for same price
 
+        // add message for price level, concatenate with any existing message for same price
         private String putMessage(NavigableMap<Long, String> map, double price, String fmt) {
             String msg = String.format(fmt, price);
             long key = Math.round(price * 100);
@@ -567,7 +639,11 @@ public class PriceHistory implements Serializable {
         }
 
         public String asDailyBar() {
-            return String.format("%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f", end.toLocalDate(), open, high, low, close, volume, vwap);
+            return "%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f".formatted(end.toLocalDate(), open, high, low, close, volume, vwap);
+        }
+
+        public String asIntradayBar() {
+            return "%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f".formatted(start.toLocalTime(), open, high, low, close, volume, vwap);
         }
     }
 

@@ -26,7 +26,7 @@ public class HistoricalDataAction extends ActionBase {
     private int rtBarCount;
     private final List<Bar> bars = new ArrayList<>();
     private PriceHistory hist = null;
-    private Bar lastBar = null;
+    private String lastMsg = null;
 
     public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration, boolean keepUpToDate) {
         super(client, idGenerator, queue);
@@ -70,22 +70,38 @@ public class HistoricalDataAction extends ActionBase {
     public void processUpdate(Bar bar) {
         var history = getPriceHistory();
         var dt = history.getDates()[history.length() - 1];
-        var barTime = parseTime(bar);
+        var barTime = parseBarTime(bar);
+        if (bar.volume().longValue() < 0) {
+            log.info("ignoring bar with neg vol " + barTime);
+            return;
+        }
         if (dt.isEqual(barTime)) {
-            history.replaceLast(barTime, bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
+            history.replace(-1, barTime, bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
         } else {
+            // TODO calc vwap. saving to mongo requires vwap calc
             history.add(barTime, bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
+            history.recalc(10);
+            log.info(history.info());
             ++rtBarCount;
             if (rtBarCount > 9) {
                 cancel();
             }
         }
-        //TODO recalc rollhi
-        var mx = history.getColumn("rollhi");
-        var mn = history.getColumn("rolllo");
-        double d = mx[mx.length - 1];
-        double dmin = mn[mn.length - 1];
-        log.info("rolling high/lo " + d + " " + dmin);
+
+        //
+        int live = history.length() - 1;
+        int sz = 5;
+        var bar2 = history.aggregrate(live - 2 * sz, live - sz - 1);
+        var bar1 = history.aggregrate(live - sz, live - 1);
+        if (bar1.low() < bar2.low()) { // 2 down
+            String s = "2 down - long entry trigger over %f low %f".formatted(bar1.high(), bar1.low());
+            if (!s.equals(lastMsg)) {
+                log.info(s);
+                lastMsg = s;
+            }
+            if (bar.close() > bar1.high())
+                log.info("triggered " + history.bar(history.length()-1));
+        }
         bars.add(bar);
     }
 
@@ -95,6 +111,9 @@ public class HistoricalDataAction extends ActionBase {
             hist = repo.loadFromIBBars(getSymbol(), bars);
             hist.rollingMax("high", 5, "rollhi");
             hist.rollingMin("low", 5, "rolllo");
+            hist.vwap("vwap");
+            hist.hilo("high", "hc");
+            hist.hilo("low", "lc");
         }
         return hist;
     }
@@ -135,7 +154,7 @@ public class HistoricalDataAction extends ActionBase {
         return String.format("%d,%s %s,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d", c, timeParts.get(0), timeParts.get(1), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue(), bar.wap().value().doubleValue(), bar.count());
     }
 
-    private LocalDateTime parseTime(Bar bar) {
+    private LocalDateTime parseBarTime(Bar bar) {
         var timeParts = WS_SPLITTER.splitToList(bar.time());
         return LocalDateTime.of(LocalDate.parse(timeParts.get(0), DateTimeFormatter.BASIC_ISO_DATE),
                                 LocalTime.parse(timeParts.get(1)));
