@@ -126,9 +126,9 @@ class PriceHistoryRepositoryTest {
     void test_loadSingleDay() {
         try {
             var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-            var xs = repository.list("zesm4");
+            var xs = repository.list("zesu4");
             for (Path p : xs) {
-                var history = repository.load("zESM4", p);
+                var history = repository.load("zESU4", p);
                 history.vwap("vwap");
                 System.out.println(history);
                 var bars = history.rthBars();
@@ -139,6 +139,16 @@ class PriceHistoryRepositoryTest {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    void test_findReversal() {
+        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        var history = repository.load("zesu4");
+        var vwap = history.vwap("vwap");
+        var strat = history.strat("strat");
+        var entry = history.indexEntry(-1);
+        log.info(entry);
     }
 
     private static void save(List<PriceHistory.Bar> minVol) {

@@ -12,7 +12,11 @@ public class App {
 
     public static void main(String[] args) {
         log.info(System.getProperty("java.version"));
-        Guice.createInjector(new AppModule())
-            .getInstance(IBConnector.class).process(true);
+        var injector = Guice.createInjector(new AppModule());
+        if (args.length == 0) {
+            injector.getInstance(IBConnector.class).process(true);
+        } else {
+            injector.getInstance(Repl.class).run();
+        }
     }
 }

@@ -26,13 +26,13 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // This dependency is used by the application.
-    implementation("com.google.guava:guava:33.0.0-jre")
+    implementation("com.google.guava:guava:33.1.0-jre")
     // https://mvnrepository.com/artifact/com.google.inject/guice
     implementation("com.google.inject:guice:7.0.0")
     // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
-    implementation("org.apache.logging.log4j:log4j-core:2.20.0")
+    implementation("org.apache.logging.log4j:log4j-core:2.23.1")
     // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync
-    implementation("org.mongodb:mongodb-driver-sync:4.10.2")
+    implementation("org.mongodb:mongodb-driver-sync:5.1.1")
 
     // add all jar files in lib dir twsapi.jar
     implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.jar"))))
@@ -48,6 +48,11 @@ java {
 application {
     // Define the main class for the application.
     mainClass.set("ibhist.App")
+}
+
+tasks.named<JavaExec>("run") {
+    // ensure when gradle run is used to start app stdin is wired to java app
+    standardInput = System.`in`
 }
 
 tasks.named<Test>("test") {

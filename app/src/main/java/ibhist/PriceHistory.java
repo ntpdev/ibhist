@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -287,6 +288,20 @@ public class PriceHistory implements Serializable {
         }
     }
 
+    public Column strat(String name) {
+        var c = newColumn(name);
+        columns.add(c);
+        double[] values = c.values;
+        var highs = getColumn("high");
+        var lows = getColumn("low");
+        for (int i = 1; i < length(); i++) {
+            int x = highs[i] > highs[i-1] ? 1 : 0;
+            x += lows[i] < lows[i-1] ? 2 : 0;
+            values[i] = x;
+        }
+        return c;
+    }
+
     private Column newColumn(String output) {
         return new Column(output, max_size);
     }
@@ -562,12 +577,16 @@ public class PriceHistory implements Serializable {
                     rthEnd > 0);
         }
 
-        public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
+            public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
+                return makeMessages(idx, null);
+            }
+
+            public NavigableMap<Long, String> makeMessages(IndexEntry idx, IndexEntry prev) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
 
             var b = aggregrate(idx.start(), idx.end());
             putMessage(priceMessages, b.open(), "%.2f glbx open");
-            putMessage(priceMessages, b.close(), "%.2f last");
+            putMessage(priceMessages, b.close(), "%.2f last (" + b.end().format(DateTimeFormatter.ofPattern("HH:mm")) + ")");
             var c = PriceHistory.this.getColumn("vwap");
             putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
@@ -588,6 +607,13 @@ public class PriceHistory implements Serializable {
                 var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
                 putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
                 putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");
+            }
+
+            if (prev != null && prev.rthStart() >= 0) {
+                var rth = aggregrate(prev.rthStart(), prev.rthEnd());
+                putMessage(priceMessages, rth.high(), "%.2f yh");
+                putMessage(priceMessages, rth.low(), "%.2f yl");
+                putMessage(priceMessages, rth.close(), "%.2f yc");
             }
             return priceMessages;
         }

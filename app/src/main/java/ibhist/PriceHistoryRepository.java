@@ -42,7 +42,7 @@ public class PriceHistoryRepository {
     PriceHistory load(String symbol) {
         try {
             Path cacheFile = root.resolve(symbol + ".bin");
-            PriceHistory priceHistory = useCachedFile(cacheFile) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
+            PriceHistory priceHistory = existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
             log.info("file loaded " + priceHistory);
             return priceHistory;
         } catch (IOException e) {
@@ -50,12 +50,12 @@ public class PriceHistoryRepository {
         }
     }
 
-    private boolean useCachedFile(Path cacheFile) throws IOException {
-        if (!Files.exists(cacheFile)) {
+    private static boolean existsRecent(Path path, long ageMinutes) throws IOException {
+        if (!Files.exists(path)) {
             return false;
         }
-        FileTime lastModifiedTime = Files.getLastModifiedTime(cacheFile);
-        return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * 60));
+        FileTime lastModifiedTime = Files.getLastModifiedTime(path);
+        return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * ageMinutes));
     }
 
     PriceHistory loadAndCache(String symbol, Path cacheFile) throws IOException {
@@ -145,11 +145,15 @@ public class PriceHistoryRepository {
     List<IBCSV> loadCsv(List<Path> files) throws IOException {
         List<IBCSV> xs = new ArrayList<>();
         for (var file : files) {
+            LocalDateTime hw = xs.isEmpty()
+                    ? LocalDateTime.of(2020, 1, 1, 0, 0)
+                    : xs.get(xs.size() - 1).date();
             log.info("loading " + file);
             // skip header line which does not have an index
             xs.addAll(Files.lines(file)
                     .filter(e -> Character.isDigit(e.charAt(0)))
                     .map(IBCSV::parse)
+                    .filter(e -> e.date().isAfter(hw))
                     .toList());
         }
         return xs;

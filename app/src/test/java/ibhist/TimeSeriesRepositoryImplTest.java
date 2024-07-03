@@ -39,7 +39,7 @@ class TimeSeriesRepositoryImplTest {
 
     @Test
     void test_newCollectionLoadAll() {
-        var xs = List.of("esh4", "nqh4", "esm4", "nqm4");
+        var xs = List.of("esh4", "nqh4", "esm4", "nqm4", "esu4", "nqu4");
 //        var xs = List.of("esh3", "esm3", "esu3", "esz3", "nqz3", "esh4", "nqh4");
         repository.newTimeSeriesCollection();
         var phr = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
@@ -54,7 +54,7 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_print_daily() {
         var phr = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = phr.load("esm4");
+        var history = phr.load("esu4");
         history.vwap("vwap");
         saveDaily("es-daily", history.dailyBars());
         saveDaily("es-daily-rth", history.rthBars());

@@ -20,7 +20,9 @@ class PriceHistoryTest {
         var ph = new PriceHistory("ES", xs.length, INPUT);
         var c = ph.setColumnValues(INPUT, xs);
         assertThat(c).startsWith(xs);
+
         ph.expand();
+
         var d = ph.getColumn(INPUT);
         assertThat(d).isNotSameAs(c);
         assertThat(d).hasSize(xs.length * 2);
