@@ -66,12 +66,20 @@ public class PriceHistory implements Serializable {
     }
 
     public double[] getColumn(String name) {
+        var xs = findColumn(name);
+        if (xs == null) {
+            throw new RuntimeException("column not found " + name);
+        }
+        return xs;
+    }
+
+    public double[] findColumn(String name) {
         for (var c : columns) {
             if (c.name.equals(name)) {
                 return c.values;
             }
         }
-        throw new RuntimeException("column not found " + name);
+        return null;
     }
 
     public double[] setColumnValues(String name, double[] xs) {
@@ -214,6 +222,7 @@ public class PriceHistory implements Serializable {
         columns.add(c);
         return c;
     }
+
     Column rollingMax(String input, int n, String output) {
         return rollingImpl(input, n, output, true);
     }
@@ -259,6 +268,56 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
+
+    /**
+     * returns max values in a sliding window of size n
+     */
+    Column localMax(String input, int n, String output) {
+        var nums = getColumn(input);
+        var c = newColumn(output);
+        int mid = n / 2;
+        for (int i = mid; i < length() - mid; ++i) {
+            double max = nums[i];
+            boolean isMax = true;
+            for (int k = i - mid; k <= i + mid; ++k) {
+                if (nums[k] > max) {
+                    isMax = false;
+                    break;
+                }
+            }
+            if (isMax) {
+                c.values[i] = max;
+            }
+        }
+        columns.add(c);
+        return c;
+    }
+
+    /**
+     * returns min values in a sliding window of size n
+     */
+    Column localMin(String input, int n, String output) {
+        var nums = getColumn(input);
+        var c = newColumn(output);
+        int mid = n / 2;
+        for (int i = mid; i < length() - mid; ++i) {
+            double min = nums[i];
+            boolean isMin = true;
+            for (int k = i - mid; k <= i + mid; ++k) {
+                if (nums[k] < min) {
+                    isMin = false;
+                    break;
+                }
+            }
+            if (isMin) {
+                c.values[i] = min;
+            }
+        }
+        columns.add(c);
+        return c;
+    }
+
+
     public Column hilo(String input, String output) {
         double[] xs = getColumn(input);
         var c = newColumn(output);
@@ -266,6 +325,7 @@ public class PriceHistory implements Serializable {
         hiloImpl(xs, c.values, 0);
         return c;
     }
+
     public void hiloImpl(double[] xs, double[] out, int start) {
 //        double[] xs = getColumn(input);
 //        var c = newColumn(output);
@@ -275,11 +335,15 @@ public class PriceHistory implements Serializable {
             double x = xs[i];
             if (x > last) {
                 int k = i - 1;
-                while (k >= 0 && xs[k] < x) { k--; }
+                while (k >= 0 && xs[k] < x) {
+                    k--;
+                }
                 out[i] = i - k - 1;
             } else if (x < last) {
                 int k = i - 1;
-                while (k >= 0 && xs[k] > x) { k--; }
+                while (k >= 0 && xs[k] > x) {
+                    k--;
+                }
                 out[i] = k + 1 - i;
             } else {
                 out[i] = 0;
@@ -295,8 +359,8 @@ public class PriceHistory implements Serializable {
         var highs = getColumn("high");
         var lows = getColumn("low");
         for (int i = 1; i < length(); i++) {
-            int x = highs[i] > highs[i-1] ? 1 : 0;
-            x += lows[i] < lows[i-1] ? 2 : 0;
+            int x = highs[i] > highs[i - 1] ? 1 : 0;
+            x += lows[i] < lows[i - 1] ? 2 : 0;
             values[i] = x;
         }
         return c;
@@ -435,7 +499,7 @@ public class PriceHistory implements Serializable {
     }
 
     public IndexEntry indexEntry(int n) {
-        return index().indexEntries.get(n >= 0 ? n  : n + index().entries().size());
+        return index().indexEntries.get(n >= 0 ? n : n + index().entries().size());
     }
 
     List<Bar> dailyBars() {
@@ -519,6 +583,7 @@ public class PriceHistory implements Serializable {
         return ends;
     }
 
+
     public String debugPrint(int n) {
         int start = 0;
         int end = n;
@@ -526,18 +591,31 @@ public class PriceHistory implements Serializable {
             start = length() + n;
             end = length();
         }
+        return debugPrint(start, end);
+    }
+
+
+    public String debugPrint(int start, int end) {
         var sb = new StringBuilder();
         var dates = getDates();
         var opens = getColumn("open");
         var highs = getColumn("high");
         var lows = getColumn("low");
         var closes = getColumn("close");
-//        var maxs = getColumn("highm5");
+        var volumes = getColumn("volume");
+        var vwaps = findColumn("vwap");
+        var strats = findColumn("strat");
+//        var maxs = getColumn("highm5")
         for (int i = start; i < end; i++) {
-            sb.append(String.format("%s %.2f %.2f %.2f %.2f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i])).append(System.lineSeparator());
+            if (vwaps == null) {
+                sb.append(String.format("%s %.2f %.2f %.2f %.2f %.0f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i])).append(System.lineSeparator());
+            } else {
+                sb.append(String.format("%s %.2f %.2f %.2f %.2f %.0f %.2f %.0f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i], vwaps[i], strats[i])).append(System.lineSeparator());
+            }
         }
         return sb.toString();
     }
+
 
     @Override
     public String toString() {
@@ -577,11 +655,11 @@ public class PriceHistory implements Serializable {
                     rthEnd > 0);
         }
 
-            public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
-                return makeMessages(idx, null);
-            }
+        public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
+            return makeMessages(idx, null);
+        }
 
-            public NavigableMap<Long, String> makeMessages(IndexEntry idx, IndexEntry prev) {
+        public NavigableMap<Long, String> makeMessages(IndexEntry idx, IndexEntry prev) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
 
             var b = aggregrate(idx.start(), idx.end());
@@ -623,9 +701,17 @@ public class PriceHistory implements Serializable {
             String msg = String.format(fmt, price);
             long key = Math.round(price * 100);
             String existing = map.get(key);
-            String value = (existing == null) ? msg : existing + ", " + msg;
+            String value = (existing == null) ? msg : existing + ", " + stripWord(msg);
             map.put(key, value);
             return existing;
+        }
+
+        private String stripWord(String s) {
+            int i = s.indexOf(' ');
+            if (i > 0) {
+                return s.substring(i + 1);
+            }
+            return s;
         }
 
         public String logIntradayInfo(NavigableMap<Long, String> map) {

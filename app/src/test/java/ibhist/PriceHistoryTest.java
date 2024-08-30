@@ -152,6 +152,28 @@ class PriceHistoryTest {
     }
 
     @Test
+    void local_max() {
+        double[] xs = {1,2,3,2,1,2,3,2,1,10};
+        var ph = new PriceHistory("ES", xs.length, INPUT);
+        ph.setLength(xs.length);
+        ph.setColumnValues(INPUT, xs);
+        var ys = ph.localMax(INPUT, 5, OUTPUT);
+        assertThat(ys.values.length).isEqualTo(xs.length);
+        assertThat(ys.values).containsExactly(0,0,3,0,0,0,3,0,0,0);
+    }
+
+    @Test
+    void local_min() {
+        double[] xs = {5,4,3,4,5,4,3,4,5,1};
+        var ph = new PriceHistory("ES", xs.length, INPUT);
+        ph.setLength(xs.length);
+        ph.setColumnValues(INPUT, xs);
+        var ys = ph.localMin(INPUT, 5, OUTPUT);
+        assertThat(ys.values.length).isEqualTo(xs.length);
+        assertThat(ys.values).containsExactly(0,0,3,0,0,0,3,0,0,0);
+    }
+
+    @Test
     void ema_step() {
         double[] xs = {100, 100, 100, 100, 200, 200, 200, 200};
         var ph = new PriceHistory("ES", xs.length, INPUT);

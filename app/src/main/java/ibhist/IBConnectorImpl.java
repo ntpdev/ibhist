@@ -51,8 +51,8 @@ public class IBConnectorImpl implements IBConnector {
         sleep(1_000);
         m_client.reqCurrentTime();
         if (fSingleDay) {
-            getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_2, false);
-//            getRealTimeBars("ES", CONTRACT_MONTH);
+            getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_1, false);
+//            getRealTimeBars("ES", CONTRACT_MONTH);l
         } else {
             getHistoricalIndexData("TICK-NYSE", "NYSE", Duration.DAY_5, false);
             getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5, false);

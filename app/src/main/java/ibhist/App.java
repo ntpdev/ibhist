@@ -10,11 +10,16 @@ import org.apache.logging.log4j.Logger;
 public class App {
     private static final Logger log = LogManager.getLogger("App");
 
+    /**
+     * If run without parameters to load function otherwise call repl class
+     * There are 2 project run configs for running the app and running the repl
+     * @param args
+     */
     public static void main(String[] args) {
         log.info(System.getProperty("java.version"));
         var injector = Guice.createInjector(new AppModule());
         if (args.length == 0) {
-            injector.getInstance(IBConnector.class).process(true);
+            injector.getInstance(IBConnector.class).process(false );
         } else {
             injector.getInstance(Repl.class).run();
         }
