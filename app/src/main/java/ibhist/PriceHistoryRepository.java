@@ -40,9 +40,12 @@ public class PriceHistoryRepository {
     }
 
     PriceHistory load(String symbol) {
+        return load(symbol, false);
+    }
+    PriceHistory load(String symbol, boolean useCache) {
         try {
             Path cacheFile = root.resolve(symbol + ".bin");
-            PriceHistory priceHistory = existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
+            PriceHistory priceHistory = useCache && existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
             log.info("file loaded " + priceHistory);
             return priceHistory;
         } catch (IOException e) {

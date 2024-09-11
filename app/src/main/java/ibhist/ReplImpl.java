@@ -44,7 +44,7 @@ public class ReplImpl implements Repl {
 
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        print("enter command [x|load sym|info n|ib|p n]\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\np n - print first or last n bars", ANSI_YELLOW);
+        print("enter command [x|load sym|info n|ib|p n]\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars", ANSI_YELLOW);
         String line;
         while ((line = reader.readLine()) != null) {
             List<String> input = WS_SPLITTER.splitToList(line);
@@ -59,7 +59,9 @@ public class ReplImpl implements Repl {
                 } else if (cmd.equals("info") && arg1 != null && history != null) {
                     info(Integer.parseInt(arg1));
                 } else if (cmd.equals("ib")) {
-                    connector.process(true);
+                    connector.process(IBConnector.ConnectorAction.ES_DAY);
+                } else if (cmd.equals("rt")) {
+                    connector.process(IBConnector.ConnectorAction.REALTIME);
                 } else if (cmd.equals("minmax") && arg1 != null && history != null) {
                     printMinMax(Integer.parseInt(arg1));
                 } else if (cmd.equals("p") && arg1 != null) {
@@ -94,11 +96,11 @@ public class ReplImpl implements Repl {
     }
 
     private void printMinMax(int n) {
-        var hi = history.localMax("high", 11, "local_high");
-        var lo = history.localMin("low", 11, "local_low");
+        var hi = history.localMax("high", n, "local_high");
+        var lo = history.localMin("low", n, "local_low");
         StringBuilder sb = new StringBuilder();
         sb.append("local high lows\n");
-        for (int i = history.length() -120; i < history.length(); ++i) {
+        for (int i = history.length() - 120; i < history.length(); ++i) {
             if (hi.values[i] > 0) {
                 sb.append(String.format("%s %.2f hi\n", history.getDates()[i].toLocalTime(), hi.values[i]));
             }
@@ -110,7 +112,7 @@ public class ReplImpl implements Repl {
     }
 
     void load(String s) {
-        history = repository.get().load(s);
+        history = repository.get().load(s, false);
         var vwap = history.vwap("vwap");
         var strat = history.strat("strat");
         for (PriceHistory.IndexEntry entry : history.index().entries()) {
@@ -131,6 +133,13 @@ public class ReplImpl implements Repl {
             }
             print("\n---\ntrade date " + entry.tradeDate().toString(), ANSI_YELLOW);
             print(sb.toString(), ANSI_YELLOW);
+        }
+        PriceHistory.IndexEntry entry = entries.get(n);
+        var c = history.rolling_standardize("volume", 30, "volstd");
+        var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
+        for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
+            if (c.values[i] > 2 || values[i - entry.rthStart()] > 2) {
+            print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + c.values[i], ANSI_CYAN);}
         }
     }
 

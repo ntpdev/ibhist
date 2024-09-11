@@ -34,10 +34,10 @@ class PriceHistoryTest {
         var h = new PriceHistory("ES", 2, "date", "open", "high", "low", "close", "volume");
         int i = 0;
         h.insert(i++, LocalDateTime.of(2024, 3, 2, 14, 30), 8, 10, 7, 9, 100)
-         .insert(i++, LocalDateTime.of(2024, 3, 2, 14, 31), 9, 11, 7, 10, 100);
+                .insert(i++, LocalDateTime.of(2024, 3, 2, 14, 31), 9, 11, 7, 10, 100);
         assertThat(h.length()).isEqualTo(2);
         h.insert(i++, LocalDateTime.of(2024, 3, 2, 14, 32), 8, 10, 7, 11, 100)
-         .insert(i++, LocalDateTime.of(2024, 3, 2, 14, 33), 9, 11, 7, 12, 100);
+                .insert(i++, LocalDateTime.of(2024, 3, 2, 14, 33), 9, 11, 7, 12, 100);
         assertThat(h.length()).isEqualTo(4);
     }
 
@@ -153,24 +153,24 @@ class PriceHistoryTest {
 
     @Test
     void local_max() {
-        double[] xs = {1,2,3,2,1,2,3,2,1,10};
+        double[] xs = {1, 2, 3, 2, 1, 2, 3, 2, 1, 10};
         var ph = new PriceHistory("ES", xs.length, INPUT);
         ph.setLength(xs.length);
         ph.setColumnValues(INPUT, xs);
-        var ys = ph.localMax(INPUT, 5, OUTPUT);
+        var ys = ph.localMax(INPUT, 2, OUTPUT);
         assertThat(ys.values.length).isEqualTo(xs.length);
-        assertThat(ys.values).containsExactly(0,0,3,0,0,0,3,0,0,0);
+        assertThat(ys.values).containsExactly(0, 0, 3, 0, 0, 0, 3, 0, 0, 10);
     }
 
     @Test
     void local_min() {
-        double[] xs = {5,4,3,4,5,4,3,4,5,1};
+        double[] xs = {5, 4, 3, 4, 5, 4, 3, 4, 5, 1};
         var ph = new PriceHistory("ES", xs.length, INPUT);
         ph.setLength(xs.length);
         ph.setColumnValues(INPUT, xs);
-        var ys = ph.localMin(INPUT, 5, OUTPUT);
+        var ys = ph.localMin(INPUT, 2, OUTPUT);
         assertThat(ys.values.length).isEqualTo(xs.length);
-        assertThat(ys.values).containsExactly(0,0,3,0,0,0,3,0,0,0);
+        assertThat(ys.values).containsExactly(0, 0, 3, 0, 0, 0, 3, 0, 0, 1);
     }
 
     @Test
@@ -256,7 +256,7 @@ class PriceHistoryTest {
             if (bar1.low() < bar2.low()) { // 2 down
                 log.info("long entry trigger over %f low %f".formatted(bar1.high(), bar1.low()));
                 if (history.bar(live).high() > bar1.high())
-                    log.info("triggered " + history.debugPrint(live+1));
+                    log.info("triggered " + history.debugPrint(live + 1));
             }
         }
         for (int i = 60; i >= 0; i--) {
@@ -300,15 +300,17 @@ class PriceHistoryTest {
         return history;
     }
 
-    record Point(int index, double value, int count) {}
+    record Point(int index, double value, int count) {
+    }
 
     // sin curve between 75 and 125 with 0.25 steps
     double generatePrice(int x, double skew) {
         return 100d + Math.round(100 * (skew * x + Math.sin(x * 0.1))) / 4d;
     }
 
-//    Bar generateBar(int i) {
+    //    Bar generateBar(int i) {
 //        LocalDateTime dt = LocalDate.now().atTime(14, 30);
 //        return new Bar()
 //    }
+
 }

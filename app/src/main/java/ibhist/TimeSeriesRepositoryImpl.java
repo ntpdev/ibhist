@@ -4,6 +4,7 @@ import com.google.common.base.Suppliers;
 import com.google.common.math.DoubleMath;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -103,11 +104,15 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     @Override
     public void append(PriceHistory history) {
-        log.info("inserting into mongodb.futures.m1 " + history);
-        var collection = getCollection();
-        LocalDateTime last = removeExistingWithDifferentVol(collection, history);
-        log.info("inserting rows after " + last);
-        insert(collection, history, last);
+        try {
+            log.info("inserting into mongodb.futures.m1 " + history);
+            var collection = getCollection();
+            LocalDateTime last = removeExistingWithDifferentVol(collection, history);
+            log.info("inserting rows after " + last);
+            insert(collection, history, last);
+        } catch (MongoTimeoutException e) {
+            log.error(e);
+        }
     }
 
     // last bar in time series may be incomplete

@@ -15,6 +15,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Interface with IB
+ * <a href="https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/">latest TWS docs</a>
+ */
 public class IBConnectorImpl implements IBConnector {
     private static final Logger log = LogManager.getLogger("IBConnectorImpl");
     public static final String CONTRACT_MONTH = "202409";
@@ -28,6 +32,7 @@ public class IBConnectorImpl implements IBConnector {
     private final Provider<TimeSeriesRepository> timeSeriesRepository;
     private final ContractFactory contractFactory;
 
+
     @Inject
     public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepository, ContractFactory contractFactory) {
         this.timeSeriesRepository = timeSeriesRepository;
@@ -35,7 +40,7 @@ public class IBConnectorImpl implements IBConnector {
     }
 
     @Override
-    public void process(boolean fSingleDay) {
+    public void process(ConnectorAction action) {
         EWrapperImpl wrapper = new EWrapperImpl(actions);
 
         m_client = wrapper.getClient();
@@ -50,17 +55,20 @@ public class IBConnectorImpl implements IBConnector {
         new Thread(this::connectionThread).start();
         sleep(1_000);
         m_client.reqCurrentTime();
-        if (fSingleDay) {
-            getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_1, false);
-//            getRealTimeBars("ES", CONTRACT_MONTH);l
-        } else {
-            getHistoricalIndexData("TICK-NYSE", "NYSE", Duration.DAY_5, false);
-            getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5, false);
-            getHistoricalData("NQ", CONTRACT_MONTH, Duration.DAY_5, false);
+        switch (action) {
+            case ES_DAY ->  getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_1, false);
+            case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_5);
+            case REALTIME -> getRealTimeBars("ES", CONTRACT_MONTH);
         }
 //        sleep(30_000);
         m_client.eDisconnect();
         sleep(1_000);
+    }
+
+    private void getMultipleHistoricalData(Duration duration) {
+        getHistoricalIndexData("TICK-NYSE", "NYSE", duration, false);
+        getHistoricalData("ES", CONTRACT_MONTH, duration, false);
+        getHistoricalData("NQ", CONTRACT_MONTH, duration, false);
     }
 
     private <T> T takeFromQueue(Class<T> clz) throws InterruptedException {

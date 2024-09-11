@@ -270,16 +270,16 @@ public class PriceHistory implements Serializable {
 
 
     /**
-     * returns max values in a sliding window of size n
+     * returns max values in a sliding window of size 2n+1
      */
     Column localMax(String input, int n, String output) {
         var nums = getColumn(input);
         var c = newColumn(output);
-        int mid = n / 2;
-        for (int i = mid; i < length() - mid; ++i) {
+        for (int i = 0; i < length(); ++i) {
             double max = nums[i];
             boolean isMax = true;
-            for (int k = i - mid; k <= i + mid; ++k) {
+            int rbound = Math.min(i + n + 1, length());
+            for (int k = Math.max(i - n, 0); k < rbound; ++k) {
                 if (nums[k] > max) {
                     isMax = false;
                     break;
@@ -294,16 +294,16 @@ public class PriceHistory implements Serializable {
     }
 
     /**
-     * returns min values in a sliding window of size n
+     * returns min values in a sliding window of size 2n+1
      */
     Column localMin(String input, int n, String output) {
         var nums = getColumn(input);
         var c = newColumn(output);
-        int mid = n / 2;
-        for (int i = mid; i < length() - mid; ++i) {
+        for (int i = 0; i < length(); ++i) {
             double min = nums[i];
             boolean isMin = true;
-            for (int k = i - mid; k <= i + mid; ++k) {
+            int rbound = Math.min(i + n + 1, length());
+            for (int k = Math.max(i - n, 0); k < rbound; ++k) {
                 if (nums[k] < min) {
                     isMin = false;
                     break;
@@ -395,6 +395,58 @@ public class PriceHistory implements Serializable {
         var highs = getColumn("high");
         var hc = getColumn("hc");
         hiloImpl(highs, hc, n >= 0 ? n : size + n);
+    }
+
+    public SummaryStats summaryStats(String name, int start, int end) {
+        return summaryStats(getColumn(name), start, end);
+    }
+
+    static public SummaryStats summaryStats(double[] xs, int start, int end) {
+        double sum = 0;
+        double max = Double.NEGATIVE_INFINITY;
+        double min = Double.POSITIVE_INFINITY;
+        int n = end - start;
+        for (int i = start; i < end; i++) {
+            double v = xs[i];
+            sum += v;
+            max = Math.max(max, v);
+            min = Math.min(min, v);
+        }
+        double mean = sum / n;
+        double variance = 0;
+        for (int i = start; i < end; i++) {
+            variance += Math.pow(xs[i] - mean, 2);
+        }
+        variance /= n; // pandas uses n-1 by default but numpy n
+        double stdDev = Math.sqrt(variance);
+        return new SummaryStats(n, sum, max, min, mean, stdDev);
+    }
+
+    /**
+     * standardize a slice of the input values
+     * @return an array the same size as the slice
+     */
+    static public double[] standardize(double[] values, int start, int end) {
+        var stats = summaryStats(values, start, end);
+        var xs = new double[stats.count()];
+        for (int i = start; i < end; i++) {
+            xs[i - start] = (values[i] - stats.mean()) / stats.stdDev();
+        }
+        return xs;
+    }
+
+    /**
+     * standardize the values of the input column
+     */
+    Column rolling_standardize(String input, int window, String output) {
+        var values = getColumn(input);
+        var c = newColumn(output);
+        var xs = c.values;
+        for (int i = 0; i < length() - window + 1; i++) {
+            var ys = standardize(values, i, i + window);
+            xs[i + window - 1] = ys[window - 1];
+        }
+        return c;
     }
 
     public static class Column implements Serializable {
@@ -759,4 +811,5 @@ public class PriceHistory implements Serializable {
         }
     }
 
+    public record SummaryStats(int count, double sum, double max, double min, double mean, double stdDev) {}
 }

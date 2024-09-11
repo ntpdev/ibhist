@@ -1,5 +1,12 @@
 package ibhist;
 
 public interface IBConnector {
-    void process(boolean fSingleDay);
+
+    enum ConnectorAction {
+        ES_DAY,
+        HISTORICAL,
+        REALTIME
+    }
+
+    void process(ConnectorAction action);
 }
