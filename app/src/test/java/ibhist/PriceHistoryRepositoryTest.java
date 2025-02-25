@@ -9,7 +9,10 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,11 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PriceHistoryRepositoryTest {
     private static final Logger log = LogManager.getLogger("PriceHistoryRepositoryTest");
+    private static final Path dataDir = Paths.get(System.getProperty("user.home"), "Documents", "data");
 
     @Test
     void test_loadAllDays() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = repository.load("esh4");
+        var history = getPriceHistory();
         var c = history.vwap("vwap");
         var cMax = history.rollingMax("high", 5, "highm5");
         assertThat(c.values.length).isEqualTo(history.length());
@@ -46,8 +49,7 @@ class PriceHistoryRepositoryTest {
 
     @Test
     void test_expandingWindow() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = repository.load("esh4");
+        var history = getPriceHistory();
         var vwap = history.vwap("vwap");
         var entry = history.indexEntry(-4);
 
@@ -82,8 +84,7 @@ class PriceHistoryRepositoryTest {
 
     @Test
     void test_expandingWindowReversed() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = repository.load("esh4");
+        var history = getPriceHistory();
         var vwap = history.vwap("vwap");
         var entry = history.indexEntry(-1);
 
@@ -119,13 +120,19 @@ class PriceHistoryRepositoryTest {
         log.info(history.printBars(highPoints.getLast().index));
     }
 
+    private static PriceHistory getPriceHistory() {
+        var repository = new PriceHistoryRepository();
+        var history = repository.load("esz4").get();
+        return history;
+    }
+
     record Point(int index, double value, int count) {
     }
 
     @Test
     void test_loadSingleDay() {
         try {
-            var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+            var repository = new PriceHistoryRepository();
             var xs = repository.list("zesu4");
             for (Path p : xs) {
                 var history = repository.load("zESU4", p);
@@ -143,8 +150,7 @@ class PriceHistoryRepositoryTest {
 
     @Test
     void test_findReversal() {
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = repository.load("zesu4");
+        var history = getPriceHistory();
         var vwap = history.vwap("vwap");
         var strat = history.strat("strat");
         var entry = history.indexEntry(-1);
@@ -154,12 +160,12 @@ class PriceHistoryRepositoryTest {
     private static void save(List<PriceHistory.Bar> minVol) {
         try {
             var buffer = new StringBuffer();
-            buffer.append(",Date,DateCl,Open,High,Low,Close,Volume,VWAP").append(System.lineSeparator());
+            buffer.append("date,dateCl,open,high,low,close,volume,vwap").append(System.lineSeparator());
             for (int i = 0; i < minVol.size(); i++) {
                 PriceHistory.Bar bar = minVol.get(i);
-                buffer.append("%d,%s,%s,%.2f,%.2f,%.2f,%.2f,%.1f,%.2f%n".formatted(i, bar.start(), bar.end(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume(), bar.vwap()));
+                buffer.append("%s,%s,%.2f,%.2f,%.2f,%.2f,%.1f,%.2f%n".formatted(bar.start(), bar.end(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume(), bar.vwap()));
             }
-            Files.writeString(Path.of("c:\\temp\\ultra\\es-minvol.csv"), buffer);
+            Files.writeString(dataDir.resolve("es-minvol.csv"), buffer);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -169,11 +175,42 @@ class PriceHistoryRepositoryTest {
     void test_load_ib_bars() {
         List<Bar> bars = List.of(
                 new Bar("20230919 23:00:00 Europe/London", 21.25, 25.75, 19.00, 22.50, Decimal.get(123.45d), 13, Decimal.get(23.45d)));
-        var repository = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
+        var repository = new PriceHistoryRepository();
 
         var history = repository.loadFromIBBars("test", bars);
 
         assertThat(history.length()).isEqualTo(1);
         assertThat(history.getDates()[0]).isEqualTo(LocalDateTime.of(2023, 9, 19, 23, 0, 0));
+    }
+
+    @Test
+    void test_print_daily() {
+        var history = getPriceHistory();
+        history.vwap("vwap");
+        saveDaily("es-daily", history.dailyBars());
+        saveDaily("es-daily-rth", history.rthBars());
+    }
+
+    private void saveDaily(String fname, List<PriceHistory.Bar> bars) {
+        try {
+            var sb = new StringBuilder();
+            sb.append("Date,Open,High,Low,Close,Volume,VWAP,Change,Gap,DayChg,Range");
+            sb.append(System.lineSeparator());
+            PriceHistory.Bar last = null;
+            for (PriceHistory.Bar bar : bars) {
+                if (bar.volume() > 500_000) {
+                    String s = last == null
+                            ? ", 0, 0, %.2f, %.2f".formatted(bar.close() - bar.open(), bar.high() - bar.low())
+                            : ", %.2f, %.2f, %.2f, %.2f".formatted(bar.close() - last.close(), bar.open() - last.close(), bar.close() - bar.open(), bar.high() - bar.low());
+                    sb.append(bar.asDailyBar()).append(s).append(System.lineSeparator());
+                }
+                last = bar;
+            }
+            String fn = "%s-%s.csv".formatted(fname, bars.getLast().end().format(DateTimeFormatter.BASIC_ISO_DATE));
+            log.info("saving " + fn);
+            Files.writeString(dataDir.resolve(fn), sb.toString(), StandardOpenOption.CREATE);
+        } catch (IOException e) {
+            log.error(e);
+        }
     }
 }

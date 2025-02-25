@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class IBConnectorImpl implements IBConnector {
     private static final Logger log = LogManager.getLogger("IBConnectorImpl");
-    public static final String CONTRACT_MONTH = "202409";
+    public static final String CONTRACT_MONTH = "202503";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -56,8 +56,8 @@ public class IBConnectorImpl implements IBConnector {
         sleep(1_000);
         m_client.reqCurrentTime();
         switch (action) {
-            case ES_DAY ->  getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_1, false);
-            case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_5);
+            case ES_DAY ->  getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5, false);
+            case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_10);
             case REALTIME -> getRealTimeBars("ES", CONTRACT_MONTH);
         }
 //        sleep(30_000);

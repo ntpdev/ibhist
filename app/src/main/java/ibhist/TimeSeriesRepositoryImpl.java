@@ -36,9 +36,9 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     public static final String CONNECTION_STRING = "mongodb://localhost:27017";
     public static final String DATABASE_NAME = "futures";
     public static final String COLLECTION_NAME = "m1";
-    private static final Logger log = LogManager.getLogger("TimeSeriesRepository");
+    private static final Logger log = LogManager.getLogger(TimeSeriesRepositoryImpl.class.getSimpleName());
     public static final ZoneId UTC = ZoneId.of("UTC");
-//    private final String connectionString;
+    //    private final String connectionString;
 //    private final String collectionName;
     private final Supplier<MongoClient> client;
     private final Supplier<MongoDatabase> db;
@@ -92,7 +92,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
      */
     private static @Nullable LocalDateTime asLocalDateTime(Document d, String fieldName) {
         Date dt = d.get(fieldName, Date.class);
-        return dt == null ? null : LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), ZoneId.of("UTC"));
+        return dt == null ? null : asLocalDateTime(dt);
+    }
+
+    private static LocalDateTime asLocalDateTime(Date dt) {
+        return LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), UTC);
     }
 
     @Override
@@ -109,7 +113,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             var collection = getCollection();
             LocalDateTime last = removeExistingWithDifferentVol(collection, history);
             log.info("inserting rows after " + last);
-            insert(collection, history, last);
+            var r = insert(collection, history, last);
+            log.info("inserted rows " + r.getInsertedIds().size());
         } catch (MongoTimeoutException e) {
             log.error(e);
         }
@@ -175,7 +180,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     PriceHistory makePriceHistory(List<PriceBarM> xs) {
-        var history = new PriceHistory(xs.get(0).symbol(), xs.size(), "date", "open", "high", "low", "close", "volume", "vwap");
+        var history = new PriceHistory(xs.getFirst().symbol(), xs.size(), "date", "open", "high", "low", "close", "volume", "vwap");
         for (var x : xs) {
             history.add(x.timestamp(), x.open(), x.high(), x.low(), x.close(), x.volume(), x.vwap());
         }
@@ -238,11 +243,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
           end: { $last : "$timestamp" }
         }
      */
-    @Override
-    public List<Summary> summary() {
-        var collection = getCollection(Summary.class);
+    protected List<SummaryMDB> summaryImpl() {
+        var collection = getCollection(SummaryMDB.class);
         // sum(returned field name, expression - typically "$field_name"
+        // must sort before feeding into aggregation since the first/last operators are order dependent
         return collection.aggregate(List.of(
+                Aggregates.sort(Sorts.ascending("symbol", "timestamp")),
                 Aggregates.group(
                         // id field ie groupBy
                         "$symbol",
@@ -256,12 +262,20 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         )).into(new ArrayList<>());
     }
 
+    @Override
+    public List<Summary> summary() {
+        return summaryImpl().stream()
+                .map(s -> new Summary(s.symbol(), s.count(), s.high(), s.low(), asLocalDateTime(s.start()), asLocalDateTime(s.end())))
+                .toList();
+    }
+
     public void close() {
         client.get().close();
     }
 
-    public record Summary(@BsonId String symbol, int count, double high, double low, Date start, Date end) {
-    }
+    public record SummaryMDB(@BsonId String symbol, int count, double high, double low, Date start, Date end) {}
+
+    public record Summary(String symbol, int count, double high, double low, LocalDateTime start, LocalDateTime end) {}
 
     /**
      * return list of first bar after a gap of 30 minutes. does not include first bar of collection

@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -34,18 +36,23 @@ public class PriceHistoryRepository {
     private final Path root;
     private final String extension;
 
+    PriceHistoryRepository() {
+        this(Paths.get(System.getProperty("user.home"), "Documents", "data"), ".csv");
+    }
+
     PriceHistoryRepository(Path root, String extension) {
         this.root = root;
         this.extension = extension;
     }
 
-    PriceHistory load(String symbol) {
-        return load(symbol, false);
+    Optional<PriceHistory> load(String symbol) {
+        return load(symbol, true);
     }
-    PriceHistory load(String symbol, boolean useCache) {
+
+    Optional<PriceHistory> load(String symbol, boolean useCache) {
         try {
             Path cacheFile = root.resolve(symbol + ".bin");
-            PriceHistory priceHistory = useCache && existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
+            var priceHistory = useCache && existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
             log.info("file loaded " + priceHistory);
             return priceHistory;
         } catch (IOException e) {
@@ -61,31 +68,36 @@ public class PriceHistoryRepository {
         return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * ageMinutes));
     }
 
-    PriceHistory loadAndCache(String symbol, Path cacheFile) throws IOException {
-        PriceHistory priceHistory = loadImpl(symbol);
-        saveToCache(cacheFile, priceHistory);
+    Optional<PriceHistory> loadAndCache(String symbol, Path cacheFile) throws IOException {
+        var priceHistory = loadImpl(symbol);
+        if (priceHistory.isPresent()) {
+            saveToCache(cacheFile, priceHistory.get());
+        }
         return priceHistory;
     }
 
-    private PriceHistory loadImpl(String symbol) throws IOException {
+    private Optional<PriceHistory> loadImpl(String symbol) throws IOException {
         var parsedCsv = loadCsv(list(symbol));
-        PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
-        int i = 0;
-        LocalDateTime lastBar = null;
-        for (IBCSV line : parsedCsv) {
-            if (lastBar != null) {
-                long diff = ChronoUnit.MINUTES.between(lastBar, line.date());
-                if (diff <= 0) {
-                    throw new RuntimeException("Current bar " + line.date() + " is before last bar " + lastBar);
+        if (!parsedCsv.isEmpty()) {
+            PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
+            int i = 0;
+            LocalDateTime lastBar = null;
+            for (IBCSV line : parsedCsv) {
+                if (lastBar != null) {
+                    long diff = ChronoUnit.MINUTES.between(lastBar, line.date());
+                    if (diff <= 0) {
+                        throw new RuntimeException("Current bar " + line.date() + " is before last bar " + lastBar);
+                    }
+                    if (diff > 1) {
+                        log.info(String.format("Gap between %s and %s of %d minutes", lastBar, line.date(), diff));
+                    }
                 }
-                if (diff > 1) {
-                    log.info(String.format("Gap between %s and %s of %d minutes", lastBar, line.date(), diff));
-                }
+                priceHistory.insert(i++, line.date(), line.open().doubleValue(), line.high().doubleValue(), line.low().doubleValue(), line.close().doubleValue(), line.volume());
+                lastBar = line.date();
             }
-            priceHistory.insert(i++, line.date(), line.open().doubleValue(), line.high().doubleValue(), line.low().doubleValue(), line.close().doubleValue(), line.volume());
-            lastBar = line.date();
+            return Optional.of(priceHistory);
         }
-        return priceHistory;
+        return Optional.empty();
     }
 
     PriceHistory load(String symbol, Path file) {
@@ -102,11 +114,11 @@ public class PriceHistoryRepository {
         }
     }
 
-    PriceHistory loadFromCache(Path cacheFile) {
+    Optional<PriceHistory> loadFromCache(Path cacheFile) {
         log.info("Loading from cache file " + cacheFile);
         try (ObjectInputStream objectOutput = new ObjectInputStream(
                 new GZIPInputStream(new FileInputStream(cacheFile.toFile())));) {
-            return (PriceHistory) objectOutput.readObject();
+            return Optional.of((PriceHistory) objectOutput.readObject());
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }

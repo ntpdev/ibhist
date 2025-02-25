@@ -22,7 +22,7 @@ public class PriceHistory implements Serializable {
     private transient Index index = null;
 
     PriceHistory(String symbol, int size, String... names) {
-        this.symbol = symbol;
+        this.symbol = symbol.toLowerCase();
         this.max_size = size;
         for (String name : names) {
             if (name.equals("date")) {
@@ -602,7 +602,9 @@ public class PriceHistory implements Serializable {
     Queue<Integer> lastBars() {
         Queue<Integer> q = new ArrayDeque<>();
         for (IndexEntry entry : index().indexEntries) {
-            int i = entry.euEnd();
+            int i = entry.euStart() - 1;
+            if (i > 0) q.add(i);
+            i = entry.euEnd();
             if (i > 0) q.add(i);
             i = entry.end();
             if (i > 0) q.add(i);

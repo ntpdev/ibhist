@@ -25,6 +25,7 @@ public class ReplImpl implements Repl {
     static final String ANSI_GREEN = "\u001B[32m";
     static final String ANSI_YELLOW = "\u001B[33m";
     static final String ANSI_CYAN = "\u001B[36m";
+    static final String ANSI_RED = "\u001B[31m";
     private final IBConnector connector;
     private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
     private PriceHistory history = null;
@@ -112,7 +113,9 @@ public class ReplImpl implements Repl {
     }
 
     void load(String s) {
-        history = repository.get().load(s, false);
+        var optH = repository.get().load(s, false);
+        if (optH.isEmpty()) return;
+        history = optH.get();
         var vwap = history.vwap("vwap");
         var strat = history.strat("strat");
         for (PriceHistory.IndexEntry entry : history.index().entries()) {
@@ -124,22 +127,26 @@ public class ReplImpl implements Repl {
     void info(int n) {
         PriceHistory.Index index = history.index();
         List<PriceHistory.IndexEntry> entries = index.entries();
-        if (n >= 0 && n < entries.size()) {
-            PriceHistory.IndexEntry entry = entries.get(n);
-            var map = index.makeMessages(entry, n >= 1 ? entries.get(n - 1) : null);
-            var sb = new StringBuilder();
-            for (String s : map.reversed().values()) {
-                sb.append(System.lineSeparator()).append(s);
-            }
-            print("\n---\ntrade date " + entry.tradeDate().toString(), ANSI_YELLOW);
-            print(sb.toString(), ANSI_YELLOW);
+        if (n < 0 || n >= entries.size()) {
+            print("index out of range", ANSI_RED);
+            return;
         }
         PriceHistory.IndexEntry entry = entries.get(n);
-        var c = history.rolling_standardize("volume", 30, "volstd");
-        var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
-        for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
-            if (c.values[i] > 2 || values[i - entry.rthStart()] > 2) {
-            print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + c.values[i], ANSI_CYAN);}
+        var map = index.makeMessages(entry, n >= 1 ? entries.get(n - 1) : null);
+        var sb = new StringBuilder();
+        for (String s : map.reversed().values()) {
+            sb.append(System.lineSeparator()).append(s);
+        }
+        print("\n---\ntrade date " + entry.tradeDate().toString(), ANSI_YELLOW);
+        print(sb.toString(), ANSI_YELLOW);
+        if (entry.rthStart() > 0) {
+            var rollingedStandardize = history.rolling_standardize("volume", 30, "volstd");
+            var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
+            for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
+                if (rollingedStandardize.values[i] > 2 || values[i - entry.rthStart()] > 2) {
+                    print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + rollingedStandardize.values[i], ANSI_CYAN);
+                }
+            }
         }
     }
 

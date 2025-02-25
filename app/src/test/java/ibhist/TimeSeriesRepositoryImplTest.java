@@ -9,12 +9,14 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 
 class TimeSeriesRepositoryImplTest {
-    private static final Logger log = LogManager.getLogger("TimeSeriesRepositoryImplTest");
+    private static final Logger log = LogManager.getLogger(TimeSeriesRepositoryImplTest.class.getSimpleName());
     private static TimeSeriesRepositoryImpl repository;
 
     @BeforeAll
@@ -30,57 +32,24 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_summary() {
         log.info(repository.summary());
-        var startTimes = repository.queryDayStartTimes("esm4");
-        var days2 = repository.queryDaysWithVolume("esm4", 100_000);
-        var history = repository.loadSingleDay("esm4", startTimes.getLast());
+        var startTimes = repository.queryDayStartTimes("esh5");
+        var days2 = repository.queryDaysWithVolume("esh5", 100_000);
+        var history = repository.loadSingleDay("esh5", startTimes.getLast());
         log.info(history);
         log.info(history.index().entries().getFirst());
     }
 
     @Test
     void test_newCollectionLoadAll() {
-        var xs = List.of("esh4", "nqh4", "esm4", "nqm4", "esu4", "nqu4");
+        var xs = List.of("esh5", "nqh5", "esm4", "nqm4", "esu4", "nqu4", "esz4", "nqz4");
 //        var xs = List.of("esh3", "esm3", "esu3", "esz3", "nqz3", "esh4", "nqh4");
         repository.newTimeSeriesCollection();
-        var phr = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        for (String s : xs) {
-            var history = phr.load(s);
-            history.vwap("vwap");
-            history.dailyBars();
-            repository.insert(history);
-        }
+        var phr = new PriceHistoryRepository();
+        xs.stream().map(phr::load).filter(Optional::isPresent).map(Optional::get).forEach(
+                h -> {
+                    h.vwap("vwap");
+                    h.dailyBars();
+                    repository.insert(h);
+                });
     }
-
-    @Test
-    void test_print_daily() {
-        var phr = new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv");
-        var history = phr.load("esu4");
-        history.vwap("vwap");
-        saveDaily("es-daily", history.dailyBars());
-        saveDaily("es-daily-rth", history.rthBars());
-    }
-
-    private void saveDaily(String fname, List<PriceHistory.Bar> bars) {
-        try {
-            var sb = new StringBuilder();
-            sb.append("Date,Open,High,Low,Close,Volume,VWAP,Change,Gap,DayChg,Range");
-            sb.append(System.lineSeparator());
-            PriceHistory.Bar last = null;
-            for (PriceHistory.Bar bar : bars) {
-                if (bar.volume() > 500_000) {
-                    String s = last == null
-                            ? String.format(", 0, 0, %.2f, %.2f", bar.close() - bar.open(), bar.high() - bar.low())
-                            : String.format(", %.2f, %.2f, %.2f, %.2f", bar.close() - last.close(), bar.open() - last.close(), bar.close() - bar.open(), bar.high() - bar.low());
-                    sb.append(bar.asDailyBar()).append(s).append(System.lineSeparator());
-                }
-                last = bar;
-            }
-            String fn = fname + "-" + bars.getLast().end().format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv";
-            log.info("saving " + fn);
-            Files.writeString(Path.of("c:\\temp\\ultra", fn), sb.toString(), StandardOpenOption.CREATE);
-        } catch (IOException e) {
-            log.error(e);
-        }
-    }
-
 }
