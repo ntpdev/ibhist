@@ -32,6 +32,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.function.Supplier;
 
+/**
+ * Implementation of a repository for time series data.
+ * see Time Series Collections in mongoDB help
+ */
 public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     public static final String CONNECTION_STRING = "mongodb://localhost:27017";
     public static final String DATABASE_NAME = "futures";

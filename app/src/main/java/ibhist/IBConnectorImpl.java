@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <a href="https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/">latest TWS docs</a>
  */
 public class IBConnectorImpl implements IBConnector {
-    private static final Logger log = LogManager.getLogger("IBConnectorImpl");
+    private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
     public static final String CONTRACT_MONTH = "202503";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
@@ -57,7 +57,7 @@ public class IBConnectorImpl implements IBConnector {
         m_client.reqCurrentTime();
         switch (action) {
             case ES_DAY ->  getHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5, false);
-            case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_10);
+            case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_5);
             case REALTIME -> getRealTimeBars("ES", CONTRACT_MONTH);
         }
 //        sleep(30_000);

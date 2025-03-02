@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class RealTimeHistoryTest {
 
-    private static final Logger log = LogManager.getLogger(RealTimeHistoryTest.class);
+    private static final Logger log = LogManager.getLogger(RealTimeHistoryTest.class.getSimpleName());
 
     @Test
     void test_notifier() {

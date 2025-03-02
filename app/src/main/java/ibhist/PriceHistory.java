@@ -1,5 +1,6 @@
 package ibhist;
 
+import com.google.common.math.DoubleMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -12,7 +13,16 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class PriceHistory implements Serializable {
-    private static final Logger log = LogManager.getLogger("PriceHistory");
+    private static final Logger log = LogManager.getLogger(PriceHistory.class.getSimpleName());
+    public static final String ANSI_RESET = "\u001B[0m";
+    public static final String ANSI_BLACK = "\u001B[30m";
+    public static final String ANSI_RED = "\u001B[31m";
+    public static final String ANSI_GREEN = "\u001B[32m";
+    public static final String ANSI_YELLOW = "\u001B[33m";
+    public static final String ANSI_BLUE = "\u001B[34m";
+    public static final String ANSI_PURPLE = "\u001B[35m";
+    public static final String ANSI_CYAN = "\u001B[36m";
+    public static final String ANSI_WHITE = "\u001B[37m";
 
     private final String symbol;
     private int size = 0;
@@ -648,6 +658,24 @@ public class PriceHistory implements Serializable {
         return debugPrint(start, end);
     }
 
+    public static String highlightInt(double d, boolean condition, String colour) {
+        return condition ? colour + String.format(colour + "%5.0f" + ANSI_RESET, d) : String.format("%5.0f", d);
+    }
+
+    public static String highlight(double d, boolean condition, String colour) {
+        return condition ? colour + String.format(colour + "%.2f" + ANSI_RESET, d) : String.format("%.2f", d);
+    }
+
+    public static String colourStrat(double strat) {
+        int number = (int) strat;
+        return switch (number) {
+            case 0 -> ANSI_YELLOW + "0" + ANSI_RESET;
+            case 1 -> ANSI_GREEN + "1" + ANSI_RESET;
+            case 2 -> ANSI_RED + "2" + ANSI_RESET;
+            case 3 -> ANSI_PURPLE + "3" + ANSI_RESET;
+            default -> Integer.toString(number);
+        };
+    }
 
     public String debugPrint(int start, int end) {
         var sb = new StringBuilder();
@@ -659,13 +687,20 @@ public class PriceHistory implements Serializable {
         var volumes = getColumn("volume");
         var vwaps = findColumn("vwap");
         var strats = findColumn("strat");
+        var volumeStats = summaryStats(volumes, start, end);
 //        var maxs = getColumn("highm5")
+        double prevHi = highs[start];
+        double prevLo = lows[start];
         for (int i = start; i < end; i++) {
             if (vwaps == null) {
-                sb.append(String.format("%s %.2f %.2f %.2f %.2f %.0f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i])).append(System.lineSeparator());
+                sb.append("%s %.2f %.2f %.2f %.2f %.0f".formatted(dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i])).append(System.lineSeparator());
             } else {
-                sb.append(String.format("%s %.2f %.2f %.2f %.2f %.0f %.2f %.0f", dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i], vwaps[i], strats[i])).append(System.lineSeparator());
+                sb.append(("%s %.2f %s %s " + ANSI_CYAN + "%.2f" + ANSI_RESET + " %s %.2f %s").formatted(
+                        dates[i].toLocalTime(), opens[i], highlight(highs[i], highs[i] > prevHi, ANSI_GREEN), highlight(lows[i], lows[i] < prevLo, ANSI_RED), closes[i], highlightInt(volumes[i], DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3), ANSI_YELLOW), vwaps[i], colourStrat(strats[i])))
+                        .append(System.lineSeparator());
             }
+            prevHi = highs[i];
+            prevLo = lows[i];
         }
         return sb.toString();
     }
@@ -810,6 +845,10 @@ public class PriceHistory implements Serializable {
 
         public String asIntradayBar() {
             return "%s, %.2f, %.2f, %.2f, %.2f, %.0f, %.2f".formatted(start.toLocalTime(), open, high, low, close, volume, vwap);
+        }
+
+        public String asIntradayBar(boolean isNH, boolean isNL, boolean isNV) {
+            return "%s, %.2f, %s, %s, %.2f, %s, %.2f".formatted(start.toLocalTime(), open, highlight(high, isNH, ANSI_GREEN), highlight(low, isNL, ANSI_RED), close, highlightInt(volume, isNV, ANSI_YELLOW), vwap);
         }
     }
 

@@ -8,7 +8,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class App {
-    private static final Logger log = LogManager.getLogger("App");
+    private static final Logger log = LogManager.getLogger(App.class.getSimpleName());
 
     /**
      * If run without parameters to load function otherwise call repl class
@@ -19,7 +19,7 @@ public class App {
         log.info(System.getProperty("java.version"));
         var injector = Guice.createInjector(new AppModule());
         if (args.length == 0) {
-            injector.getInstance(IBConnector.class).process(IBConnector.ConnectorAction.ES_DAY);
+            injector.getInstance(IBConnector.class).process(IBConnector.ConnectorAction.HISTORICAL);
         } else {
             injector.getInstance(Repl.class).run();
         }

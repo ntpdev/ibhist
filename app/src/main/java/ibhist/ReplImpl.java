@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 public class ReplImpl implements Repl {
-    private static final Logger log = LogManager.getLogger("ReplImpl");
+    private static final Logger log = LogManager.getLogger(ReplImpl.class.getSimpleName());
     static final Splitter WS_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();
     static final String ANSI_RESET = "\u001B[0m";
     static final String ANSI_GREEN = "\u001B[32m";
@@ -45,12 +45,12 @@ public class ReplImpl implements Repl {
 
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        print("enter command [x|load sym|info n|ib|p n]\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars", ANSI_YELLOW);
+        StringColourise.print("[yellow]enter command x|load sym|info n|ib|p n\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars[/]");
         String line;
         while ((line = reader.readLine()) != null) {
             List<String> input = WS_SPLITTER.splitToList(line);
             if (!input.isEmpty()) {
-                print(line, ANSI_YELLOW);
+                StringColourise.print("[yellow]" + line + "[/]");
                 String cmd = input.get(0).toLowerCase();
                 String arg1 = input.size() > 1 ? input.get(1) : null;
                 if (cmd.equals("x")) {
@@ -89,11 +89,11 @@ public class ReplImpl implements Repl {
     }
 
     private void printHistory(int n) {
-        print(history.debugPrint(n), ANSI_GREEN);
+        System.out.println(history.debugPrint(n));
     }
 
     private void printHistory(int start, int end) {
-        print(history.debugPrint(start, end), ANSI_GREEN);
+        System.out.println(history.debugPrint(start, end));
     }
 
     private void printMinMax(int n) {
@@ -119,7 +119,7 @@ public class ReplImpl implements Repl {
         var vwap = history.vwap("vwap");
         var strat = history.strat("strat");
         for (PriceHistory.IndexEntry entry : history.index().entries()) {
-            print(entry.toString(), ANSI_YELLOW);
+            StringColourise.print("[yellow]%s[/]".formatted(entry.toString()));
         }
     }
 
@@ -140,11 +140,11 @@ public class ReplImpl implements Repl {
         print("\n---\ntrade date " + entry.tradeDate().toString(), ANSI_YELLOW);
         print(sb.toString(), ANSI_YELLOW);
         if (entry.rthStart() > 0) {
-            var rollingedStandardize = history.rolling_standardize("volume", 30, "volstd");
+            var rollingStandardize = history.rolling_standardize("volume", 30, "volstd");
             var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
             for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
-                if (rollingedStandardize.values[i] > 2 || values[i - entry.rthStart()] > 2) {
-                    print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + rollingedStandardize.values[i], ANSI_CYAN);
+                if (rollingStandardize.values[i] > 2 || values[i - entry.rthStart()] > 2) {
+                    print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + rollingStandardize.values[i], ANSI_CYAN);
                 }
             }
         }
