@@ -2,6 +2,9 @@ package ibhist;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.regex.Pattern;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class StringColouriseTest {
@@ -18,6 +21,7 @@ class StringColouriseTest {
     @Test
     void test_no_colours() {
         assertThat(StringColourise.colourise("the quick brown fox")).isEqualTo("the quick brown fox");
+        assertThat(StringColourise.colourise("the quick [red,0]brown[/] fox")).isEqualTo("the quick brown fox");
     }
 
     @Test
@@ -31,7 +35,19 @@ class StringColouriseTest {
     }
 
     @Test
-    void test_z() {
-        StringColourise.z("normal [green]green text[/] and [red,1]red text[/] normal");
+    void test_format() {
+        assertThat(StringColourise.print("[yellow]Hello[/] [red,%d]%s[/]", 0, "World")).isEqualTo("\u001B[33mHello\u001B[0m World");
+    }
+
+    @Test
+    void test_regex_match() {
+        var text = "normal [green]green text[/] and [red,1]red text[/] normal";
+        var matcher = StringColourise.matchColours.matcher(text);
+        var xs = new ArrayList<String>();
+        while (matcher.find()) {
+            xs.add(matcher.group());
+        }
+        assertThat(xs).containsExactly("[green]","[/]","[red,1]","[/]");
     }
 }
+

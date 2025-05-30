@@ -15,7 +15,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Supplier;
 
 public class ReplImpl implements Repl {
@@ -38,14 +41,14 @@ public class ReplImpl implements Repl {
     public void run() {
         try {
             runImpl();
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error(e);
         }
     }
 
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        StringColourise.print("[yellow]enter command x|load sym|info n|ib|p n\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars[/]");
+        StringColourise.print("[yellow]enter command\nx| load sym | info n | ib | p n | minmax n=15\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars or bars at time hh:mm[/]\n");
         String line;
         while ((line = reader.readLine()) != null) {
             List<String> input = WS_SPLITTER.splitToList(line);
@@ -58,25 +61,30 @@ public class ReplImpl implements Repl {
                 } else if (cmd.equals("load") && arg1 != null) {
                     load(arg1);
                 } else if (cmd.equals("info") && arg1 != null && history != null) {
-                    info(Integer.parseInt(arg1));
+                    tryParseInt(arg1).ifPresent(this::info);
                 } else if (cmd.equals("ib")) {
                     connector.process(IBConnector.ConnectorAction.ES_DAY);
                 } else if (cmd.equals("rt")) {
                     connector.process(IBConnector.ConnectorAction.REALTIME);
-                } else if (cmd.equals("minmax") && arg1 != null && history != null) {
-                    printMinMax(Integer.parseInt(arg1));
+                } else if (cmd.equals("minmax") && history != null) {
+                    if (arg1 != null) {
+                        tryParseInt(arg1).ifPresent(this::printMinMax);
+                    } else {
+                        printMinMax(15);
+                    }
                 } else if (cmd.equals("p") && arg1 != null) {
                     // param 1 = offset, -offset, hh:mm
                     if (arg1.contains(":")) {
                         PriceHistory.Index index = history.index();
                         var entries = index.entries();
-                        var barTime = makeDateTime(arg1, entries.getLast().tradeDate());
-                        int i = history.find(barTime);
-                        if (i > 0) {
-                            printHistory(i - 5, i + 6);
-                        }
+                        tryParseDateTime(arg1, entries.getLast().tradeDate()).ifPresent(barTime -> {
+                            int i = history.find(barTime);
+                            if (i > 0) {
+                                printHistory(i - 9, i + 10);
+                            }
+                        });
                     } else {
-                        printHistory(Integer.parseInt(arg1));
+                        tryParseInt(arg1).ifPresent(this::printHistory);
                     }
                 }
             }
@@ -84,32 +92,46 @@ public class ReplImpl implements Repl {
         reader.close();
     }
 
-    private static LocalDateTime makeDateTime(String s, LocalDate dt) {
-        return dt.atTime(LocalTime.parse(s, DateTimeFormatter.ISO_TIME));
+    private static OptionalInt tryParseInt(String s) {
+        try {
+            return OptionalInt.of(Integer.parseInt(s));
+        } catch (NumberFormatException e) {
+            return OptionalInt.empty();
+        }
+    }
+
+    private static Optional<LocalDateTime> tryParseDateTime(String s, LocalDate dt) {
+        try {
+            return Optional.of(dt.atTime(LocalTime.parse(s, DateTimeFormatter.ofPattern("H:mm"))));
+        } catch (DateTimeParseException e) {
+            log.error(e);
+            return Optional.empty();
+        }
     }
 
     private void printHistory(int n) {
-        System.out.println(history.debugPrint(n));
+        StringColourise.print(history.debugPrint(n));
     }
 
     private void printHistory(int start, int end) {
-        System.out.println(history.debugPrint(start, end));
+        StringColourise.print(history.debugPrint(start, end));
     }
 
     private void printMinMax(int n) {
         var hi = history.localMax("high", n, "local_high");
         var lo = history.localMin("low", n, "local_low");
         StringBuilder sb = new StringBuilder();
-        sb.append("local high lows\n");
-        for (int i = history.length() - 120; i < history.length(); ++i) {
+        sb.append("\n[yellow]local high / low %d[/]\n".formatted(n));
+        for (int i = history.length() - 240; i < history.length(); ++i) {
             if (hi.values[i] > 0) {
-                sb.append(String.format("%s %.2f hi\n", history.getDates()[i].toLocalTime(), hi.values[i]));
+                sb.append(String.format("[green]%s %.2f hi ▲[/]\n", history.getDates()[i].toLocalTime(), hi.values[i]));
             }
             if (lo.values[i] > 0) {
-                sb.append(String.format("%s %.2f lo\n", history.getDates()[i].toLocalTime(), lo.values[i]));
+                sb.append(String.format("[red]%s %.2f lo ▼[/]\n", history.getDates()[i].toLocalTime(), lo.values[i]));
             }
         }
-        print(sb.toString(), ANSI_YELLOW);
+        sb.append("[yellow]---[/]");
+        StringColourise.print(sb.toString());
     }
 
     void load(String s) {
@@ -127,10 +149,7 @@ public class ReplImpl implements Repl {
     void info(int n) {
         PriceHistory.Index index = history.index();
         List<PriceHistory.IndexEntry> entries = index.entries();
-        if (n < 0 || n >= entries.size()) {
-            print("index out of range", ANSI_RED);
-            return;
-        }
+        n = (n + entries.size()) % entries.size();
         PriceHistory.IndexEntry entry = entries.get(n);
         var map = index.makeMessages(entry, n >= 1 ? entries.get(n - 1) : null);
         var sb = new StringBuilder();
@@ -138,16 +157,17 @@ public class ReplImpl implements Repl {
             sb.append(System.lineSeparator()).append(s);
         }
         print("\n---\ntrade date " + entry.tradeDate().toString(), ANSI_YELLOW);
-        print(sb.toString(), ANSI_YELLOW);
-        if (entry.rthStart() > 0) {
-            var rollingStandardize = history.rolling_standardize("volume", 30, "volstd");
-            var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
-            for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
-                if (rollingStandardize.values[i] > 2 || values[i - entry.rthStart()] > 2) {
-                    print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + rollingStandardize.values[i], ANSI_CYAN);
-                }
-            }
-        }
+        StringColourise.print(sb.toString());
+        //TODO: figure this out and add to history.print to can see volume spikes
+//        if (entry.rthStart() > 0) {
+//            var rollingStandardize = history.rolling_standardize("volume", 30, "volstd");
+//            var values = PriceHistory.standardize(history.getColumn("volume"), entry.rthStart(), entry.end() + 1);
+//            for (int i = entry.rthStart(); i < entry.end() + 1; i++) {
+//                if (rollingStandardize.values[i] > 2 || values[i - entry.rthStart()] > 2) {
+//                    print(history.bar(i).toString() + " " + values[i - entry.rthStart()] + " " + rollingStandardize.values[i], ANSI_CYAN);
+//                }
+//            }
+//        }
     }
 
     private static void print(String line, String escapeSeq) {

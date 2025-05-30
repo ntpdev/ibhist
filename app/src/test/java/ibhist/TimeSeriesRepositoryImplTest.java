@@ -32,16 +32,16 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_summary() {
         log.info(repository.summary());
-        var startTimes = repository.queryDayStartTimes("esh5");
-        var days2 = repository.queryDaysWithVolume("esh5", 100_000);
-        var history = repository.loadSingleDay("esh5", startTimes.getLast());
+        var startTimes = repository.queryDayStartTimes("esm5");
+        var days2 = repository.queryDaysWithVolume("esm5", 100_000);
+        var history = repository.loadSingleDay("esm5", startTimes.getLast());
         log.info(history);
         log.info(history.index().entries().getFirst());
     }
 
     @Test
     void test_newCollectionLoadAll() {
-        var xs = List.of("esh5", "nqh5", "esm4", "nqm4", "esu4", "nqu4", "esz4", "nqz4");
+        var xs = List.of("esm5", "nqm5", "esh5", "nqh5", "esm4", "nqm4", "esu4", "nqu4", "esz4", "nqz4");
 //        var xs = List.of("esh3", "esm3", "esu3", "esz3", "nqz3", "esh4", "nqh4");
         repository.newTimeSeriesCollection();
         var phr = new PriceHistoryRepository();

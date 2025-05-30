@@ -14,7 +14,8 @@ public class StringColourise {
     public static final String ANSI_CYAN = "\u001B[36m";
     public static final String ANSI_WHITE = "\u001B[37m";
 
-    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w+)(?:,(\\d+))?]");
+//    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w+)(?:,(\\d+))?]");
+    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w*)(?:,(\\d+))?]");
 //            Pattern.compile("\\[(black|red|green|yellow|blue|purple|cyan|white)](.*?)\\[/]");
 
     public static String getAnsiColour(String colour) {
@@ -32,61 +33,70 @@ public class StringColourise {
     }
 
     public static String colourise(String input) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+
         var matcher = matchColours.matcher(input);
         var sb = new StringBuilder();
-        boolean lastColorApplied = false;
+        boolean colorActive = false;
 
         while (matcher.find()) {
-            String replacement = "";
-            String slash = matcher.group(1);
+            boolean isClosingTag = !matcher.group(1).isEmpty();
             String colorName = matcher.group(2);
-            String flagStr = matcher.group(3);
-            boolean flag = flagStr != null && flagStr.equals("1");
 
-            if (!slash.isEmpty()) { // Handle reset tag [/]
-                if (lastColorApplied) {
-                    replacement = ANSI_RESET;
-                    lastColorApplied = false;
-                }
-            } else { // Handle color tags
-                if (flag) {
-                    String ansiCode = getAnsiColour(colorName);
-                    if (!ansiCode.isEmpty()) {
-                        replacement = ansiCode;
-                        lastColorApplied = true;
-                    } else {
-                        lastColorApplied = false;
-                    }
+            if (isClosingTag) {
+                // Only apply reset if a color was actually applied
+                if (colorActive) {
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(ANSI_RESET));
+                    colorActive = false;
                 } else {
-                    lastColorApplied = false;
+                    // Skip this closing tag since no color was applied
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
+                }
+                continue;
+            }
+
+            // Handle opening tags
+            if (colorName.isEmpty()) {
+                // Empty color name in opening tag - skip it
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
+                continue;
+            }
+
+            int flagValue = 1; // default to enabled
+
+            if (matcher.group(3) != null) {
+                try {
+                    flagValue = Integer.parseInt(matcher.group(3));
+                } catch (NumberFormatException e) {
+                    flagValue = 0; // treat invalid numbers as disabled
                 }
             }
 
-            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+            if (flagValue == 1) { // Only apply color if flag is 1 or not present
+                String ansiCode = getAnsiColour(colorName);
+                if (!ansiCode.isEmpty()) {
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(ansiCode));
+                    colorActive = true;
+                    continue;
+                }
+            }
+
+            // If we get here, either:
+            // - It's an unknown color name
+            // - Or flag was set to 0 to disable coloring
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
         }
+
         matcher.appendTail(sb);
         return sb.toString();
     }
-//    public static String colourise(String text) {
-//        if (text == null || text.isEmpty()) {
-//            return text;
-//        }
-//
-//        var matcher = matchColours.matcher(text);
-//        StringBuilder sb = new StringBuilder();
-//        while (matcher.find()) {
-//            matcher.appendReplacement(sb, getAnsiColour(matcher.group(1)) + matcher.group(2) + ANSI_RESET);
-//        }
-//        matcher.appendTail(sb);
-//        return sb.toString();
-//    }
 
-    public static void z(String text) {
-        var matcher = Pattern.compile("\\[\\w+(?:,\\d+)?]").matcher(text);
-
-        while (matcher.find()) {
-            System.out.println("Found: " + matcher.group());
-        }
+    public static String print(String format, Object... args) {
+        String coloured = colourise(format.formatted(args));
+        System.out.println(coloured);
+        return coloured;
     }
 
     public static String print(String text) {

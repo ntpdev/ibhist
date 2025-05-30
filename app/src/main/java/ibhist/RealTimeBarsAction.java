@@ -16,7 +16,7 @@ public class RealTimeBarsAction extends ActionBase {
     public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract) {
         super(client, idGenerator, queue);
         this.contract = contract;
-        countNotifier = RealTimeHistory.newCountNotifier(e -> e > 5906.00, 3, this::priceTriggered);
+        countNotifier = RealTimeHistory.newCountNotifier(e -> e > 5867.25, 3, this::priceTriggered);
     }
 
     private void priceTriggered(RealTimeHistory.PriceEvent event) {

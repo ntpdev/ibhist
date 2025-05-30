@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class IBConnectorImpl implements IBConnector {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
-    public static final String CONTRACT_MONTH = "202503";
+//    public static final String CONTRACT_MONTH = "202503";
+    public static final String CONTRACT_MONTH = "202506";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;

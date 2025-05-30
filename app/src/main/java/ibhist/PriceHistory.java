@@ -678,6 +678,8 @@ public class PriceHistory implements Serializable {
     }
 
     public String debugPrint(int start, int end) {
+        start = Math.max(start, 0);
+        end = Math.min(end, size);
         var sb = new StringBuilder();
         var dates = getDates();
         var opens = getColumn("open");
@@ -687,6 +689,8 @@ public class PriceHistory implements Serializable {
         var volumes = getColumn("volume");
         var vwaps = findColumn("vwap");
         var strats = findColumn("strat");
+        var highStats = summaryStats(highs, start, end);
+        var lowStats = summaryStats(lows, start, end);
         var volumeStats = summaryStats(volumes, start, end);
 //        var maxs = getColumn("highm5")
         double prevHi = highs[start];
@@ -695,8 +699,21 @@ public class PriceHistory implements Serializable {
             if (vwaps == null) {
                 sb.append("%s %.2f %.2f %.2f %.2f %.0f".formatted(dates[i].toLocalTime(), opens[i], highs[i], lows[i], closes[i], volumes[i])).append(System.lineSeparator());
             } else {
-                sb.append(("%s %.2f %s %s " + ANSI_CYAN + "%.2f" + ANSI_RESET + " %s %.2f %s").formatted(
-                        dates[i].toLocalTime(), opens[i], highlight(highs[i], highs[i] > prevHi, ANSI_GREEN), highlight(lows[i], lows[i] < prevLo, ANSI_RED), closes[i], highlightInt(volumes[i], DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3), ANSI_YELLOW), vwaps[i], colourStrat(strats[i])))
+                String ind = "";
+                if (highs[i] == highStats.max()) {
+                    ind = " ▲";
+                }
+                if (lows[i] == lowStats.min()) {
+                    ind = " ▼";
+                }
+                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %s%s").formatted(
+                            dates[i].toLocalTime(),
+                            opens[i],
+                            highs[i] > prevHi ? 1 : 0, highs[i],
+                            lows[i] < prevLo ? 1 : 0, lows[i],
+                            closes[i],
+                            DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
+                            vwaps[i], colourStrat(strats[i]), ind))
                         .append(System.lineSeparator());
             }
             prevHi = highs[i];
@@ -753,7 +770,7 @@ public class PriceHistory implements Serializable {
 
             var b = aggregrate(idx.start(), idx.end());
             putMessage(priceMessages, b.open(), "%.2f glbx open");
-            putMessage(priceMessages, b.close(), "%.2f last (" + b.end().format(DateTimeFormatter.ofPattern("HH:mm")) + ")");
+            putMessage(priceMessages, b.close(), "[yellow]%.2f last (" + b.end().format(DateTimeFormatter.ofPattern("HH:mm")) + ")[/]");
             var c = PriceHistory.this.getColumn("vwap");
             putMessage(priceMessages, c[idx.end()], "%.2f vwap");
 
@@ -768,7 +785,7 @@ public class PriceHistory implements Serializable {
 
             if (idx.rthStart() >= 0) {
                 var rth = aggregrate(idx.rthStart(), idx.rthEnd());
-                putMessage(priceMessages, rth.open(), "%.2f open");
+                putMessage(priceMessages, rth.open(), "[green]%.2f open[/]");
                 putMessage(priceMessages, rth.high(), "%.2f high");
                 putMessage(priceMessages, rth.low(), "%.2f low");
                 var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
@@ -778,8 +795,8 @@ public class PriceHistory implements Serializable {
 
             if (prev != null && prev.rthStart() >= 0) {
                 var rth = aggregrate(prev.rthStart(), prev.rthEnd());
-                putMessage(priceMessages, rth.high(), "%.2f yh");
-                putMessage(priceMessages, rth.low(), "%.2f yl");
+                putMessage(priceMessages, rth.high(), "[cyan]%.2f yh[/]");
+                putMessage(priceMessages, rth.low(), "[red]%.2f yl[/]");
                 putMessage(priceMessages, rth.close(), "%.2f yc");
             }
             return priceMessages;
