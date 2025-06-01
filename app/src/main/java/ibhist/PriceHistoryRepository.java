@@ -191,7 +191,7 @@ public class PriceHistoryRepository {
                     new BigDecimal(xs.get(5)).setScale(2, RoundingMode.HALF_UP),
                     Integer.parseInt(xs.get(6)),
                     new BigDecimal(xs.get(7)).setScale(3, RoundingMode.HALF_UP));
-            // ignore bar count
+            // ignore bar threshold
         }
     }
 

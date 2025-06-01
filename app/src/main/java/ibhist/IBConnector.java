@@ -9,4 +9,8 @@ public interface IBConnector {
     }
 
     void process(ConnectorAction action);
+    void connect();
+    void disconnect();
+    void requestRealTimeBars(String symbol, String contractMonth, MonitorManager manager);
+    boolean cancelRealtime();
 }

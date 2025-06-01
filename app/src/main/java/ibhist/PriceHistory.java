@@ -415,6 +415,7 @@ public class PriceHistory implements Serializable {
         double sum = 0;
         double max = Double.NEGATIVE_INFINITY;
         double min = Double.POSITIVE_INFINITY;
+        end = (end < 0) ? xs.length : Math.min(end, xs.length);
         int n = end - start;
         for (int i = start; i < end; i++) {
             double v = xs[i];
@@ -569,7 +570,7 @@ public class PriceHistory implements Serializable {
     }
 
     List<Bar> rthBars() {
-        // use mapMulti rather than map index -> Optional<Bar> then filter empty -> then map to extract value
+        // use mapMulti rather than map index -> Optional<Bar> then filter empty -> then map to extract threshold
         // note either explicit types on lambda required or add type to mapMulti
         return index().indexEntries.stream()
                 .<Bar>mapMulti((e, consumer) -> {
@@ -648,24 +649,6 @@ public class PriceHistory implements Serializable {
     }
 
 
-    public String debugPrint(int n) {
-        int start = 0;
-        int end = n;
-        if (n < 0) {
-            start = length() + n;
-            end = length();
-        }
-        return debugPrint(start, end);
-    }
-
-    public static String highlightInt(double d, boolean condition, String colour) {
-        return condition ? colour + String.format(colour + "%5.0f" + ANSI_RESET, d) : String.format("%5.0f", d);
-    }
-
-    public static String highlight(double d, boolean condition, String colour) {
-        return condition ? colour + String.format(colour + "%.2f" + ANSI_RESET, d) : String.format("%.2f", d);
-    }
-
     public static String colourStrat(double strat) {
         int number = (int) strat;
         return switch (number) {
@@ -677,9 +660,20 @@ public class PriceHistory implements Serializable {
         };
     }
 
+    public String debugPrint(int n) {
+        int start = 0;
+        int end = n;
+        if (n < 0) {
+            start = length() + n;
+            end = length();
+        }
+        return debugPrint(start, end);
+    }
+
+
     public String debugPrint(int start, int end) {
         start = Math.max(start, 0);
-        end = Math.min(end, size);
+        end = Math.min(end, length());
         var sb = new StringBuilder();
         var dates = getDates();
         var opens = getColumn("open");
@@ -701,10 +695,10 @@ public class PriceHistory implements Serializable {
             } else {
                 String ind = "";
                 if (highs[i] == highStats.max()) {
-                    ind = " ▲";
+                    ind += " ▲";
                 }
                 if (lows[i] == lowStats.min()) {
-                    ind = " ▼";
+                    ind += " ▼";
                 }
                 sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %s%s").formatted(
                             dates[i].toLocalTime(),
@@ -865,7 +859,7 @@ public class PriceHistory implements Serializable {
         }
 
         public String asIntradayBar(boolean isNH, boolean isNL, boolean isNV) {
-            return "%s, %.2f, %s, %s, %.2f, %s, %.2f".formatted(start.toLocalTime(), open, highlight(high, isNH, ANSI_GREEN), highlight(low, isNL, ANSI_RED), close, highlightInt(volume, isNV, ANSI_YELLOW), vwap);
+            return "%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/d] %.2f [yellow,%d]%5.0f[/] %.2f".formatted(start.toLocalTime(), open, isNH ? 1 : 0, high, isNL ? 1 : 0, low, close, isNV ? 1 : 0 ,volume, vwap);
         }
     }
 

@@ -10,8 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ContractDetailsAction extends ActionBase {
 
     private Contract contract;
-
     private ContractDetails contractDetails;
+
     public ContractDetailsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract) {
         super(client, idGenerator, queue);
         this.contract = contract;
@@ -29,11 +29,6 @@ public class ContractDetailsAction extends ActionBase {
     public void makeRequest() {
         client.reqContractDetails(requestId, contract);
     }
-
-//    @Override
-//    public void process() {
-//        continuation.accept(this);
-//    }
 
     public void process(ContractDetails contractDetails) {
         this.contractDetails = contractDetails;

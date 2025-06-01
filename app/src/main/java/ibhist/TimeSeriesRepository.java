@@ -32,7 +32,7 @@ public interface TimeSeriesRepository {
     /* equivalent aggregation pipeline
             $group: {
               _id: "$symbol",
-              count: { $sum : 1 },
+              threshold: { $sum : 1 },
               start: { $first : "$timestamp" },
               end: { $last : "$timestamp" }
             }

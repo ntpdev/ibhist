@@ -1,6 +1,7 @@
 package ibhist;
 
 import com.ib.client.*;
+import com.ib.client.protobuf.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -9,14 +10,21 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
 
+/**
+ * EWrapperImpl handles async callbacks from TWS.
+ * Responsible for receiving the callback and dispatching to the correct action
+ * The messages that we are interested in have a reqId parameter which is used to find
+ * the action in the actions map and dispatch it. Any action may handle multiple callbacks
+ * as part of the same logical request.
+ */
 public class EWrapperImpl implements EWrapper {
-    private static final Logger log = LogManager.getLogger("EWrapperImpl");
+    private static final Logger log = LogManager.getLogger(EWrapperImpl.class.getSimpleName());
 
     //! [socket_declare]
     private final EReaderSignal readerSignal;
     private final EClientSocket clientSocket;
     protected int currentOrderId = -1;
-
+    protected volatile int nextValidId = -1;
     protected final Map<Integer, Action> actions;
     //! [socket_declare]
 
@@ -38,6 +46,7 @@ public class EWrapperImpl implements EWrapper {
     public int getCurrentOrderId() {
         return currentOrderId;
     }
+
 
     @Override
     public void tickPrice(int i, int i1, double v, TickAttrib tickAttrib) {
@@ -70,7 +79,8 @@ public class EWrapperImpl implements EWrapper {
     }
 
     @Override
-    public void orderStatus(int i, String s, Decimal decimal, Decimal decimal1, double v, int i1, int i2, double v1, int i3, String s1, double v2) {
+    public void orderStatus(int orderId, String status, Decimal filled, Decimal remaining, double avgFillPrice, long permId, int parentId,
+                            double lastFillPrice, int clientId, String whyHeld, double mktCapPrice) {
 
     }
 
@@ -106,14 +116,14 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void nextValidId(int i) {
-
+        nextValidId = i;
+        log.info("nextValidId " + i);
     }
 
     @Override
-    public void contractDetails(int i, ContractDetails contractDetails) {
-        log.info("contractDetails " + i);
-        log.info(contractDetails.conid() + " " + contractDetails.contract().textDescription());
-        if (actions.get(i) instanceof ContractDetailsAction a) {
+    public void contractDetails(int reqId, ContractDetails contractDetails) {
+        log.info("contractDetails reqId = {} {} {}", reqId, contractDetails.conid(), contractDetails.contract().textDescription());
+        if (actions.get(reqId) instanceof ContractDetailsAction a) {
             log.info("found action in map");
             a.process(contractDetails);
         }
@@ -168,28 +178,29 @@ public class EWrapperImpl implements EWrapper {
 
     }
 
+    // historical data is received bar by bar then an dataEnd message is sent
     @Override
-    public void historicalData(int i, Bar bar) {
+    public void historicalData(int reqId, Bar bar) {
 //        log.info("historicalData " + i);
-        if (actions.get(i) instanceof HistoricalDataAction a) {
+        if (actions.get(reqId) instanceof HistoricalDataAction a) {
 //            log.info("found action in map");
             a.process(bar);
         }
     }
 
     @Override
-    public void historicalDataUpdate(int i, Bar bar) {
+    public void historicalDataUpdate(int reqId, Bar bar) {
 //        log.info("historicalDataUpdate " + i);
-        if (actions.get(i) instanceof HistoricalDataAction a) {
+        if (actions.get(reqId) instanceof HistoricalDataAction a) {
 //            log.info(bar.time() + " " + bar.close());
             a.processUpdate(bar);
         }
     }
 
     @Override
-    public void historicalDataEnd(int i, String start, String end) {
-        log.info("historicalDataEnd " + i + " " + start + " " + end);
-        if (actions.get(i) instanceof HistoricalDataAction a) {
+    public void historicalDataEnd(int reqId, String start, String end) {
+        log.info("historicalDataEnd " + reqId + " " + start + " " + end);
+        if (actions.get(reqId) instanceof HistoricalDataAction a) {
             a.processEnd();
         }
     }
@@ -243,8 +254,7 @@ public class EWrapperImpl implements EWrapper {
     }
 
     @Override
-    public void commissionReport(CommissionReport commissionReport) {
-
+    public void commissionAndFeesReport(CommissionAndFeesReport commissionAndFeesReport) {
     }
 
     @Override
@@ -299,17 +309,42 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void error(Exception e) {
-
+        log.error("ERROR: exception from API {}", e.getMessage());
     }
 
     @Override
-    public void error(String s) {
-
+    public void error(String e) {
+        log.error("ERROR: error from API {}", e);
     }
 
     @Override
-    public void error(int i, int i1, String s, String s1) {
+    public void error(int id, long errorTime, int errorCode, String errorMsg, String advancedOrderRejectJson) {
+        // Common error codes:
+        // 2104: Market data farm connection is OK
+        // 2106: Historical data farm connection is OK
+        // 2158: Sec-def data farm connection is OK
+        // These are actually connectivity confirmations, not errors.
+        if (errorCode == 2104 || errorCode == 2106 || errorCode == 2158) {
+            log.info("Connectivity confirmation received: Code {}, Msg: {}", errorCode, errorMsg);
+            return; // Not a true error
+        }
 
+        log.error("ERROR: Id: {}, time: {}, Code: {}, Msg: {}, Advanced Order Reject JSON: {}", id, errorCode, errorTime, errorMsg, advancedOrderRejectJson);
+
+        //TODO: removed DSv3 code for now
+        // If order placement error (e.g. id matches an orderId), update order book
+//        if (id > 0) { // Often, id here is the orderId for order-related errors
+//            if (errorCode == 201 || errorCode == 202) { // 201: Order rejected, 202: Order cancelled
+//                orderBook.updateStatus(id, Status.REJECTED, 0); // Or CANCELLED as appropriate
+//                log.info("Order {} rejected/cancelled via error callback. OrderBook: {}", id, orderBook.getSnapshot());
+//            } else if (isConnectivityError(errorCode)) {
+//                log.error("Connectivity issue detected (Code {}). Initiating disconnect.", errorCode);
+//                handleDisconnect();
+//            }
+//        } else if (isConnectivityError(errorCode)) { // id == -1 for general messages
+//            log.error("Connectivity issue detected (Code {}). Initiating disconnect.", errorCode);
+//            handleDisconnect();
+//        }
     }
 
     @Override
@@ -509,6 +544,41 @@ public class EWrapperImpl implements EWrapper {
 
     @Override
     public void userInfo(int i, String s) {
+
+    }
+
+    @Override
+    public void currentTimeInMillis(long l) {
+
+    }
+
+    @Override
+    public void orderStatusProtoBuf(OrderStatusProto.OrderStatus orderStatus) {
+
+    }
+
+    @Override
+    public void openOrderProtoBuf(OpenOrderProto.OpenOrder openOrder) {
+
+    }
+
+    @Override
+    public void openOrdersEndProtoBuf(OpenOrdersEndProto.OpenOrdersEnd openOrdersEnd) {
+
+    }
+
+    @Override
+    public void errorProtoBuf(ErrorMessageProto.ErrorMessage errorMessage) {
+
+    }
+
+    @Override
+    public void execDetailsProtoBuf(ExecutionDetailsProto.ExecutionDetails executionDetails) {
+
+    }
+
+    @Override
+    public void execDetailsEndProtoBuf(ExecutionDetailsEndProto.ExecutionDetailsEnd executionDetailsEnd) {
 
     }
 }

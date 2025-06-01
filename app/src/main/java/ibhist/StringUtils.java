@@ -1,9 +1,19 @@
 package ibhist;
 
+import com.google.common.base.CharMatcher;
+import com.google.common.base.Splitter;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class StringColourise {
+/**
+ * Yet another StringUtils class
+ */
+public class StringUtils {
+    public static final Splitter WS_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();
     public static final String ANSI_RESET = "\u001B[0m";
     public static final String ANSI_BLACK = "\u001B[30m";
     public static final String ANSI_RED = "\u001B[31m";
@@ -32,6 +42,11 @@ public class StringColourise {
         };
     }
 
+    /**
+     * Replace markup colours by ANSI codes. Colours can be conditional
+     * @param input - can contain [red]text[/] or [red,1]text[/] . The ,1 is optional condition can be 0 or 1
+     * @return
+     */
     public static String colourise(String input) {
         if (input == null || input.isEmpty()) {
             return input;
@@ -93,16 +108,82 @@ public class StringColourise {
         return sb.toString();
     }
 
+    public static String print(StringBuilder text) {
+        return StringUtils.print(text.toString());
+    }
+
+    public static String print(String text) {
+        if (text == null || text.isEmpty())  {
+            text = "null";
+        }
+        String coloured = colourise(text);
+        System.out.println(coloured);
+        return coloured;
+    }
+
     public static String print(String format, Object... args) {
         String coloured = colourise(format.formatted(args));
         System.out.println(coloured);
         return coloured;
     }
 
-    public static String print(String text) {
-        String coloured = colourise(text);
-        System.out.println(coloured);
-        return coloured;
+
+    /**
+     * Splits the input on whitespace, then recombines tokens
+     * that begin with a single or double quote into one phrase
+     * (including any internal whitespace). Unterminated quotes
+     * are assumed to close at end of input.
+     *
+     * @param input the raw string
+     * @return list of tokens / phrases, never null
+     */
+    public static List<String> split(String input) {
+        if (input == null) {
+            return Collections.emptyList();
+        }
+        List<String> tokens = WS_SPLITTER.splitToList(input);
+        List<String> result = new ArrayList<>(tokens.size());
+
+        StringBuilder buffer = null;
+        char quoteChar = 0;
+
+        for (String token : tokens) {
+            if (buffer == null) {
+                // Not in the middle of a quoted phrase
+                boolean isQuote = token.charAt(0) == '"' || token.charAt(0) == '\'';
+                if (token.length() > 1
+                        && isQuote
+                        && token.charAt(token.length() - 1) == token.charAt(0)) {
+                    // Fully quoted in one token: "foo" or 'bar'
+                    result.add(token.substring(1, token.length() - 1));
+                } else if (token.length() >= 1 && isQuote) {
+                    // Start of a quoted phrase
+                    quoteChar = token.charAt(0);
+                    buffer = new StringBuilder(token.substring(1));
+                } else {
+                    // Ordinary token
+                    result.add(token);
+                }
+            } else {
+                // We're inside a quoted phrase
+                buffer.append(' ').append(token);
+                if (token.charAt(token.length() - 1) == quoteChar) {
+                    // End of quoted phrase
+                    // Drop the trailing quote
+                    buffer.setLength(buffer.length() - 1);
+                    result.add(buffer.toString());
+                    buffer = null;
+                    quoteChar = 0;
+                }
+            }
+        }
+
+        // Unterminated quote: flush buffer as-is
+        if (buffer != null) {
+            result.add(buffer.toString());
+        }
+
+        return result;
     }
 }
 

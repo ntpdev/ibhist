@@ -235,14 +235,14 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             var d = new PriceBarM(null, history.getSymbolLowerCase(), dates[i], opens[i], highs[i], lows[i], closes[i], volumes[i], BigDecimal.valueOf(vwaps[i]).setScale(3, RoundingMode.HALF_UP).doubleValue());
             rows.add(d);
         }
-        log.info("inserting count " + rows.size());
+        log.info("inserting threshold " + rows.size());
         return m1.insertMany(rows);
     }
 
     /* equivalent aggregation pipeline
         $group: {
           _id: "$symbol",
-          count: { $sum : 1 },
+          threshold: { $sum : 1 },
           start: { $first : "$timestamp" },
           end: { $last : "$timestamp" }
         }
@@ -257,7 +257,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         // id field ie groupBy
                         "$symbol",
                         // aggregates
-                        Accumulators.sum("count", 1),
+                        Accumulators.sum("threshold", 1),
                         Accumulators.max("high", "$high"),
                         Accumulators.min("low", "$low"),
                         Accumulators.first("start", "$timestamp"),
@@ -323,7 +323,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         // id - groupBy fields {$dateTrunc: {date: "$timestamp", unit: "day"} }
                         new Document("$dateTrunc", new Document("date", "$timestamp").append("unit", "day")),
                         // aggregration fields in group
-                        Accumulators.sum("count", 1),
+                        Accumulators.sum("threshold", 1),
                         Accumulators.sum("volume", "$volume")),
                 Aggregates.match(Filters.gte("volume", minVol)),
                 Aggregates.sort(Sorts.ascending("_id"))

@@ -8,7 +8,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract  class ActionBase implements Action {
-    protected static final Logger log = LogManager.getLogger("ActionBase");
+    protected static final Logger log = LogManager.getLogger(ActionBase.class.getSimpleName());
     protected final int requestId;
     protected final EClientSocket client;
     protected final BlockingQueue<Action> queue;
@@ -23,6 +23,11 @@ public abstract  class ActionBase implements Action {
         return requestId;
     }
 
+    /**
+     * called once the action has been completed.
+     * puts this onto queue back to main thread.
+     * the concrete class will have the data received.
+     */
     @Override
     public void process() {
         try {

@@ -1,22 +1,27 @@
 package ibhist;
 
-import com.google.common.math.DoubleMath;
 import com.ib.client.Contract;
 import com.ib.client.EClientSocket;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.DoublePredicate;
 
 public class RealTimeBarsAction extends ActionBase {
     private final Contract contract;
     private final RealTimeHistory bars = new RealTimeHistory();
-    private final RealTimeHistory.PriceCondition countNotifier;
+    private final List<DoublePredicate> monitors = new ArrayList<>();
+    private final MonitorManager monitorManager;
+    private volatile boolean cancelSent = false;
+    private boolean fInit = false;
 
-    public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract) {
+    public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, MonitorManager monitorManager) {
         super(client, idGenerator, queue);
         this.contract = contract;
-        countNotifier = RealTimeHistory.newCountNotifier(e -> e > 5867.25, 3, this::priceTriggered);
+        this.monitorManager = monitorManager;
     }
 
     private void priceTriggered(RealTimeHistory.PriceEvent event) {
@@ -28,35 +33,53 @@ public class RealTimeBarsAction extends ActionBase {
         client.reqRealTimeBars(requestId, contract, 5, "TRADES", false, Collections.emptyList());
     }
 
+
     @Override
     public void cancel() {
         client.cancelRealTimeBars(requestId);
     }
 
+    public void forceCancel() {
+        cancelSent = true;
+    }
+
     public void process(RealTimeBar bar) {
 //        log.info("process received " + bar);
+        if (!fInit) {
+            fInit = true;
+            for (var monitor : monitorManager) {
+                monitors.add(RealTimeHistory.newPriceMonitor(monitor, this::priceTriggered));
+            }
+        }
         bars.add(bar);
-        countNotifier.test(bar.close());
+        monitorPrice(bar);
         if (bar.dt().getSecond() == 0) {
             var xs = bars.toPriceBars();
 
             StringBuilder sb = new StringBuilder();
-            sb.append(System.lineSeparator()).append(PriceHistory.ANSI_YELLOW + "--- real time history" + PriceHistory.ANSI_RESET).append(System.lineSeparator());
+            sb.append("\n[yellow]--- real time history ").append(xs.getLast().start().toLocalTime()).append("[/]\n");
             double prevHi = xs.getFirst().high();
             double prevLo = xs.getFirst().low();
-            for (var b: xs) {
+            for (var b : xs) {
                 sb.append(b.asIntradayBar(b.high() > prevHi, b.low() < prevLo, false))
                         .append(System.lineSeparator());
                 prevLo = b.low();
                 prevHi = b.high();
             }
-            System.out.println(sb);
+            StringUtils.print(sb);
         }
 //        log.info("running m1 " + bars.aggregrateLast(12));
 
-        if (bars.size() > 120) {
+        // cancel realtime bars after 10 minutes (120 5s bars)
+        if (bars.size() > 120 || cancelSent) {
             cancel();
             process();  // put action on queue
+        }
+    }
+
+    protected void monitorPrice(RealTimeBar bar) {
+        for (var n : monitors) {
+            n.test(bar.close());
         }
     }
 
