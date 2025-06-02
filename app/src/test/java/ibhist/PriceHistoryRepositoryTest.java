@@ -133,7 +133,7 @@ class PriceHistoryRepositoryTest {
     void test_loadSingleDay() {
         try {
             var repository = new PriceHistoryRepository();
-            var xs = repository.list("zesu4");
+            var xs = repository.findFiles("zesu4");
             for (Path p : xs) {
                 var history = repository.load("zESU4", p);
                 history.vwap("vwap");
@@ -171,17 +171,6 @@ class PriceHistoryRepositoryTest {
         }
     }
 
-    @Test
-    void test_load_ib_bars() {
-        List<Bar> bars = List.of(
-                new Bar("20230919 23:00:00 Europe/London", 21.25, 25.75, 19.00, 22.50, Decimal.get(123.45d), 13, Decimal.get(23.45d)));
-        var repository = new PriceHistoryRepository();
-
-        var history = repository.loadFromIBBars("test", bars);
-
-        assertThat(history.length()).isEqualTo(1);
-        assertThat(history.getDates()[0]).isEqualTo(LocalDateTime.of(2023, 9, 19, 23, 0, 0));
-    }
 
     @Test
     void test_print_daily() {

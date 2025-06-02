@@ -17,12 +17,12 @@ public class ContractFactoryImpl implements ContractFactory {
     }
 
     @Override
-    public Contract newIndex(String symbol, String exchange) {
+    public Contract newIndex(String symbol) {
         Contract contract = new Contract();
         contract.symbol(symbol);
         contract.secType("IND");
         contract.currency("USD");
-        contract.exchange(exchange);
+        contract.exchange("NYSE");
         return contract;
     }
 }

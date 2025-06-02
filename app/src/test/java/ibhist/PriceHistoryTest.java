@@ -1,13 +1,17 @@
 package ibhist;
 
+import com.ib.client.Bar;
+import com.ib.client.Decimal;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 import static ibhist.ActionBase.log;
+import static ibhist.StringUtils.print;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PriceHistoryTest {
@@ -141,7 +145,7 @@ class PriceHistoryTest {
     }
 
     @Test
-    void min_closes() {
+    void rolling_min() {
         double[] xs = {5, 3, 1, 4, 2, 3, 1, 6, 7, 3};
         var ph = new PriceHistory("ES", xs.length, INPUT);
         ph.setLength(xs.length);
@@ -249,16 +253,18 @@ class PriceHistoryTest {
         var lowPoints = new ArrayList<Point>();
         double hiwm = -1e6;
         double lowm = 1e6;
+        var sb = new StringBuilder();
         for (int live = 40; live < 60; live++) {
             int sz = 5;
             var bar2 = history.aggregrate(live - 2 * sz, live - sz - 1);
             var bar1 = history.aggregrate(live - sz, live - 1);
             if (bar1.low() < bar2.low()) { // 2 down
-                log.info("long entry trigger over %f low %f".formatted(bar1.high(), bar1.low()));
+                sb.append("long entry trigger over %f low %f\n".formatted(bar1.high(), bar1.low()));
                 if (history.bar(live).high() > bar1.high())
-                    log.info("triggered " + history.debugPrint(live + 1));
+                    sb.append("triggered\n").append(history.asTextTable(live + 1));
             }
         }
+        print(sb);
         for (int i = 60; i >= 0; i--) {
             double h = highs[i];
             double l = lows[i];
@@ -285,6 +291,17 @@ class PriceHistoryTest {
         log.info(history.printBars(highPoints.getLast().index));
     }
 
+    @Test
+    void test_load_ib_bars() {
+        List<Bar> bars = List.of(
+                new Bar("20230919 23:00:00 Europe/London", 21.25, 25.75, 19.00, 22.50, Decimal.get(123.45d), 13, Decimal.get(23.45d)));
+        var history = PriceHistory.createFromIBBars("test", bars);
+
+        assertThat(history.length()).isEqualTo(1);
+        assertThat(history.getDates()[0]).isEqualTo(LocalDateTime.of(2023, 9, 19, 23, 0, 0));
+    }
+
+
 
     private PriceHistory rising_trend() {
         LocalDateTime dt = LocalDate.now().atTime(14, 30);
@@ -297,6 +314,7 @@ class PriceHistoryTest {
             open = d;
         }
         history.vwap("vwap");
+        history.strat("strat");
         return history;
     }
 

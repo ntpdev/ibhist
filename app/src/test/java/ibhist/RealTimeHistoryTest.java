@@ -17,7 +17,7 @@ class RealTimeHistoryTest {
         List<RealTimeHistory.PriceEvent> events = new ArrayList<>();
 
         // the monitor under test: threshold >120.0, minLength=3, collect to our list
-        var monitor = new RealTimeHistory.PriceMonitor(price -> price > 120.0, 3, , events::add);
+        var monitor = new RealTimeHistory.PriceMonitor(new MonitorManager.MonitorData("",price -> price > 120.0, 3), events::add);
 
         // feed it 128 sample prices
         for (int i = 0; i < 128; i++) {
@@ -68,7 +68,7 @@ class RealTimeHistoryTest {
         List<RealTimeHistory.PriceEvent> events = new ArrayList<>();
 
         // predicate: price < 100, minLength=2, handler collects to our list
-        var monitor = new RealTimeHistory.PriceMonitor(price -> price < 100.0, 2, , events::add);
+        var monitor = new RealTimeHistory.PriceMonitor(new MonitorManager.MonitorData("", price -> price < 100.0, 2), events::add);
 
         // feed it a hard‐coded sequence:
         // 106 (no event),

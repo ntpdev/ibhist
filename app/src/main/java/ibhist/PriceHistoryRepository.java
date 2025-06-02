@@ -68,16 +68,14 @@ public class PriceHistoryRepository {
         return lastModifiedTime.toInstant().isAfter(Instant.now().minusSeconds(60 * ageMinutes));
     }
 
-    Optional<PriceHistory> loadAndCache(String symbol, Path cacheFile) throws IOException {
+    private Optional<PriceHistory> loadAndCache(String symbol, Path cacheFile) throws IOException {
         var priceHistory = loadImpl(symbol);
-        if (priceHistory.isPresent()) {
-            saveToCache(cacheFile, priceHistory.get());
-        }
+        priceHistory.ifPresent(history -> saveToCache(cacheFile, history));
         return priceHistory;
     }
 
     private Optional<PriceHistory> loadImpl(String symbol) throws IOException {
-        var parsedCsv = loadCsv(list(symbol));
+        var parsedCsv = loadCsv(findFiles(symbol));
         if (!parsedCsv.isEmpty()) {
             PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
             int i = 0;
@@ -105,7 +103,7 @@ public class PriceHistoryRepository {
             var parsedCsv = loadCsv(List.of(file));
             PriceHistory priceHistory = new PriceHistory(symbol, parsedCsv.size(), "date", "open", "high", "low", "close", "volume");
             int i = 0;
-            for (PriceHistoryRepository.IBCSV line : parsedCsv) {
+            for (var line : parsedCsv) {
                 priceHistory.insert(i++, line.date(), line.open().doubleValue(), line.high().doubleValue(), line.low().doubleValue(), line.close().doubleValue(), line.volume());
             }
             return priceHistory;
@@ -124,17 +122,6 @@ public class PriceHistoryRepository {
         }
     }
 
-    PriceHistory loadFromIBBars(String symbol, List<Bar> bars) {
-        PriceHistory priceHistory = new PriceHistory(symbol, bars.size(), "date", "open", "high", "low", "close", "volume");
-        for (Bar bar : bars) {
-            var dateParts = WS_SPLITTER.splitToList(bar.time());
-            priceHistory.add(LocalDateTime.of(LocalDate.parse(dateParts.get(0), DateTimeFormatter.BASIC_ISO_DATE), LocalTime.parse(dateParts.get(1))),
-                    bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
-        }
-        return priceHistory;
-
-    }
-
     void saveToCache(Path cacheFile, PriceHistory priceHistory) {
         log.info("Saving to cache file " + cacheFile);
         try (ObjectOutputStream objectOutput = new ObjectOutputStream(
@@ -145,7 +132,7 @@ public class PriceHistoryRepository {
         }
     }
 
-    List<Path> list(String symbol) throws IOException {
+    List<Path> findFiles(String symbol) throws IOException {
         return Files.list(root)
                 .filter(e -> matches(e, symbol))
                 .sorted()
@@ -157,13 +144,19 @@ public class PriceHistoryRepository {
         return fname.startsWith(prefix) && fname.endsWith(extension);
     }
 
+    /**
+     * load csv files in order. duplicate timestamps are skipped
+     * @param files
+     * @return
+     * @throws IOException
+     */
     List<IBCSV> loadCsv(List<Path> files) throws IOException {
         List<IBCSV> xs = new ArrayList<>();
         for (var file : files) {
             LocalDateTime hw = xs.isEmpty()
                     ? LocalDateTime.of(2020, 1, 1, 0, 0)
-                    : xs.get(xs.size() - 1).date();
-            log.info("loading " + file);
+                    : xs.getLast().date();
+            log.info("loadCsv " + file);
             // skip header line which does not have an index
             xs.addAll(Files.lines(file)
                     .filter(e -> Character.isDigit(e.charAt(0)))

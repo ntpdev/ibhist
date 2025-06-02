@@ -29,7 +29,7 @@ public abstract  class ActionBase implements Action {
      * the concrete class will have the data received.
      */
     @Override
-    public void process() {
+    public void complete() {
         try {
             queue.put(this);
         } catch (InterruptedException e) {

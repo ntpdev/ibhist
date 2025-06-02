@@ -1,6 +1,7 @@
 package ibhist;
 
 import com.google.common.math.DoubleMath;
+import com.ib.client.Bar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -8,21 +9,13 @@ import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class PriceHistory implements Serializable {
     private static final Logger log = LogManager.getLogger(PriceHistory.class.getSimpleName());
-    public static final String ANSI_RESET = "\u001B[0m";
-    public static final String ANSI_BLACK = "\u001B[30m";
-    public static final String ANSI_RED = "\u001B[31m";
-    public static final String ANSI_GREEN = "\u001B[32m";
-    public static final String ANSI_YELLOW = "\u001B[33m";
-    public static final String ANSI_BLUE = "\u001B[34m";
-    public static final String ANSI_PURPLE = "\u001B[35m";
-    public static final String ANSI_CYAN = "\u001B[36m";
-    public static final String ANSI_WHITE = "\u001B[37m";
 
     private final String symbol;
     private int size = 0;
@@ -92,12 +85,12 @@ public class PriceHistory implements Serializable {
         return null;
     }
 
-    public double[] setColumnValues(String name, double[] xs) {
-        if (xs.length != max_size) {
-            throw new IllegalArgumentException("lengths do not match " + xs.length);
+    public double[] setColumnValues(String name, double[] source) {
+        if (source.length != max_size) {
+            throw new IllegalArgumentException("lengths do not match " + source.length);
         }
         var c = getColumn(name);
-        System.arraycopy(xs, 0, c, 0, xs.length);
+        System.arraycopy(source, 0, c, 0, source.length);
         return c;
     }
 
@@ -652,29 +645,32 @@ public class PriceHistory implements Serializable {
     public static String colourStrat(double strat) {
         int number = (int) strat;
         return switch (number) {
-            case 0 -> ANSI_YELLOW + "0" + ANSI_RESET;
-            case 1 -> ANSI_GREEN + "1" + ANSI_RESET;
-            case 2 -> ANSI_RED + "2" + ANSI_RESET;
-            case 3 -> ANSI_PURPLE + "3" + ANSI_RESET;
+            case 0 -> "[yellow]0[/]";
+            case 1 -> "[green]1[/]";
+            case 2 -> "[red]2[/]";
+            case 3 -> "[purple]3[/]";
             default -> Integer.toString(number);
         };
     }
 
-    public String debugPrint(int n) {
+    /**
+     * first or last n bars
+     */
+    public String asTextTable(int n) {
         int start = 0;
         int end = n;
         if (n < 0) {
             start = length() + n;
             end = length();
         }
-        return debugPrint(start, end);
+        return asTextTable(start, end);
     }
 
-
-    public String debugPrint(int start, int end) {
+    public String asTextTable(int start, int end) {
         start = Math.max(start, 0);
         end = Math.min(end, length());
         var sb = new StringBuilder();
+        sb.append("time  open    high    low     close  volume vwap    ema  ticks strat").append(System.lineSeparator());
         var dates = getDates();
         var opens = getColumn("open");
         var highs = getColumn("high");
@@ -682,6 +678,7 @@ public class PriceHistory implements Serializable {
         var closes = getColumn("close");
         var volumes = getColumn("volume");
         var vwaps = findColumn("vwap");
+        var emas = ema("close", "ema", 90).values; // calculate on-fly
         var strats = findColumn("strat");
         var highStats = summaryStats(highs, start, end);
         var lowStats = summaryStats(lows, start, end);
@@ -700,14 +697,18 @@ public class PriceHistory implements Serializable {
                 if (lows[i] == lowStats.min()) {
                     ind += " ▼";
                 }
-                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %s%s").formatted(
+                double close = closes[i];
+                double rth_open = 5897.50;
+                sb.append(("%s %.2f [greenib,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %.2f %2.0f %s %s%s%s%s").formatted(
                             dates[i].toLocalTime(),
                             opens[i],
                             highs[i] > prevHi ? 1 : 0, highs[i],
                             lows[i] < prevLo ? 1 : 0, lows[i],
-                            closes[i],
+                            close,
                             DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
-                            vwaps[i], colourStrat(strats[i]), ind))
+                            vwaps[i], emas[i],
+                            (highs[i] - lows[i]) * 4, colourStrat(strats[i]),
+                            trendInd(close, rth_open), trendInd(close, vwaps[i]), trendInd(close, emas[i]), ind))
                         .append(System.lineSeparator());
             }
             prevHi = highs[i];
@@ -716,6 +717,9 @@ public class PriceHistory implements Serializable {
         return sb.toString();
     }
 
+    static String trendInd(double x, double y) {
+        return x >= y ? "[green]▲[/]" : "[red]▼[/]";
+    }
 
     @Override
     public String toString() {
@@ -726,6 +730,17 @@ public class PriceHistory implements Serializable {
                 ", from=" + dates[0] +
                 ", to=" + dates[length() - 1] + "]";
     }
+
+    public static PriceHistory createFromIBBars(String symbol, List<com.ib.client.Bar> bars) {
+        PriceHistory priceHistory = new PriceHistory(symbol, bars.size(), "date", "open", "high", "low", "close", "volume");
+        for (com.ib.client.Bar bar : bars) {
+            var dateParts = bar.time().split(" ");
+            priceHistory.add(LocalDateTime.of(LocalDate.parse(dateParts[0], DateTimeFormatter.BASIC_ISO_DATE), LocalTime.parse(dateParts[1])),
+                    bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
+        }
+        return priceHistory;
+    }
+
 
     public class Index {
         List<PriceHistory.IndexEntry> indexEntries = new ArrayList<>();
@@ -797,27 +812,19 @@ public class PriceHistory implements Serializable {
         }
 
         // add message for price level, concatenate with any existing message for same price
-        private String putMessage(NavigableMap<Long, String> map, double price, String fmt) {
-            String msg = String.format(fmt, price);
-            long key = Math.round(price * 100);
-            String existing = map.get(key);
-            String value = (existing == null) ? msg : existing + ", " + stripWord(msg);
-            map.put(key, value);
-            return existing;
+        private String putMessage(NavigableMap<Long,String> map,
+                                  double price,
+                                  String fmt) {
+            String msg = fmt.formatted(price);
+            long key   = Math.round(price * 100);
+
+            return map.merge(key, msg, (oldVal, newVal) -> oldVal + ", " + newVal);
         }
 
-        private String stripWord(String s) {
-            int i = s.indexOf(' ');
-            if (i > 0) {
-                return s.substring(i + 1);
-            }
-            return s;
-        }
-
-        public String logIntradayInfo(NavigableMap<Long, String> map) {
+        public String intradayInfoAsString(NavigableMap<Long, String> map) {
             var sb = new StringBuilder();
             for (String s : map.reversed().values()) {
-                sb.append(System.lineSeparator()).append(s);
+                sb.append(s).append(System.lineSeparator());
             }
             return sb.toString();
         }

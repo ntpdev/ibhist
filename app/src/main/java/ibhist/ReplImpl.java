@@ -19,6 +19,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Supplier;
 
+import static ibhist.StringUtils.print;
+
 public class ReplImpl implements Repl {
     private static final Logger log = LogManager.getLogger(ReplImpl.class.getSimpleName());
     private final IBConnector connector;
@@ -36,17 +38,18 @@ public class ReplImpl implements Repl {
         } catch (Exception e) {
             log.error(e);
         }
+        print("[blue]bye[/]");
     }
 
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        StringUtils.print("[yellow]enter command\nx| load sym | info n | ib | p n | minmax n=15\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars or bars at time hh:mm[/]\n");
+        print("[yellow]enter command\nx| load sym | info n | ib | p n | minmax n=15\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars or bars at time hh:mm[/]\n");
         String line;
         MonitorManager monitorManager = new MonitorManager();
         while ((line = reader.readLine()) != null) {
             var input = StringUtils.split(line);
             if (!input.isEmpty()) {
-                StringUtils.print("[yellow]" + line + "[/]");
+                print("[yellow]" + line + "[/]");
                 String cmd = input.get(0).toLowerCase();
                 String arg1 = input.size() > 1 ? input.get(1) : null;
                 if (cmd.equals("x")) {
@@ -56,7 +59,7 @@ public class ReplImpl implements Repl {
                 } else if (cmd.equals("info") && history != null) {
                     info(parseInt(arg1, -1));
                 } else if (cmd.equals("ib")) {
-                    connector.process(IBConnector.ConnectorAction.ES_DAY);
+                    requestHistoricData();
                 } else if (cmd.equals("rt")) {
                     processRt(input, monitorManager);
                 } else if (cmd.equals("minmax") && history != null) {
@@ -84,17 +87,24 @@ public class ReplImpl implements Repl {
         reader.close();
     }
 
+    private void requestHistoricData() {
+        connector.connect();
+        var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_5, false);
+        history = action.asPriceHistory();
+        connector.disconnect();
+    }
+
     // commands rt / rt cancel
     private boolean processRt(List<String> input, MonitorManager monitorManager) {
         if (input.getFirst().equalsIgnoreCase("rt")) {
             if (input.size() == 1) {
                 connector.connect();
                 connector.requestRealTimeBars("ES", IBConnectorImpl.CONTRACT_MONTH, monitorManager);
-                StringUtils.print("[blue]requesting realtime bars[/]");
+                print("[blue]requesting realtime bars[/]");
             } else {
                 connector.cancelRealtime();
                 connector.disconnect();
-                StringUtils.print("[blue]client disconnect[/]");
+                print("[blue]client disconnect[/]");
             }
             return true;
         }
@@ -126,11 +136,11 @@ public class ReplImpl implements Repl {
     }
 
     private void printHistory(int n) {
-        StringUtils.print(history.debugPrint(n));
+        print(history.asTextTable(n));
     }
 
     private void printHistory(int start, int end) {
-        StringUtils.print(history.debugPrint(start, end));
+        print(history.asTextTable(start, end));
     }
 
     private void printMinMax(int n) {
@@ -147,7 +157,7 @@ public class ReplImpl implements Repl {
             }
         }
         sb.append("[yellow]---[/]");
-        StringUtils.print(sb.toString());
+        print(sb.toString());
     }
 
     void load(String s) {
@@ -162,7 +172,7 @@ public class ReplImpl implements Repl {
             sb.append(entry).append(System.lineSeparator());
         }
         sb.append("[/]");
-        StringUtils.print(sb);
+        print(sb);
     }
 
 
@@ -177,7 +187,7 @@ public class ReplImpl implements Repl {
         for (String s : map.reversed().values()) {
             sb.append(s).append(System.lineSeparator());
         }
-        StringUtils.print(sb);
+        print(sb);
         //TODO: figure this out and add to history.print to can see volume spikes
 //        if (entry.rthStart() > 0) {
 //            var rollingStandardize = history.rolling_standardize("volume", 30, "volstd");

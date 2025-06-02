@@ -9,8 +9,9 @@ public interface IBConnector {
     }
 
     void process(ConnectorAction action);
-    void connect();
+    boolean connect();
     void disconnect();
-    void requestRealTimeBars(String symbol, String contractMonth, MonitorManager manager);
+    HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate);
+    RealTimeBarsAction requestRealTimeBars(String symbol, String contractMonth, MonitorManager manager);
     boolean cancelRealtime();
 }

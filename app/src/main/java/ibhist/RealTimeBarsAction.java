@@ -15,13 +15,15 @@ public class RealTimeBarsAction extends ActionBase {
     private final RealTimeHistory bars = new RealTimeHistory();
     private final List<DoublePredicate> monitors = new ArrayList<>();
     private final MonitorManager monitorManager;
+    private final int maxBars;
     private volatile boolean cancelSent = false;
     private boolean fInit = false;
 
-    public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, MonitorManager monitorManager) {
+    public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, MonitorManager monitorManager, int maxBars) {
         super(client, idGenerator, queue);
         this.contract = contract;
         this.monitorManager = monitorManager;
+        this.maxBars = maxBars;
     }
 
     private void priceTriggered(RealTimeHistory.PriceEvent event) {
@@ -30,6 +32,7 @@ public class RealTimeBarsAction extends ActionBase {
 
     @Override
     public void makeRequest() {
+        log.info("reqRealTimeBars reqId = {} symbol = {}", requestId, contract.localSymbol());
         client.reqRealTimeBars(requestId, contract, 5, "TRADES", false, Collections.emptyList());
     }
 
@@ -70,10 +73,10 @@ public class RealTimeBarsAction extends ActionBase {
         }
 //        log.info("running m1 " + bars.aggregrateLast(12));
 
-        // cancel realtime bars after 10 minutes (120 5s bars)
-        if (bars.size() > 120 || cancelSent) {
+        // cancel realtime bars after limit or cancel sent.
+        if (bars.size() >= maxBars || cancelSent) {
             cancel();
-            process();  // put action on queue
+            complete();  // put action on queue
         }
     }
 
