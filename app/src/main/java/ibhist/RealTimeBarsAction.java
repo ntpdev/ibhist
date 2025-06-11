@@ -46,7 +46,7 @@ public class RealTimeBarsAction extends ActionBase {
         cancelSent = true;
     }
 
-    public void process(RealTimeBar bar) {
+    public void onRealtimeBar(RealTimeBar bar) {
 //        log.info("process received " + bar);
         if (!fInit) {
             fInit = true;

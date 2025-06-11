@@ -7,9 +7,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
-import java.security.KeyStore;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -22,7 +22,7 @@ import static ibhist.StringUtils.print;
  * Interface with IB
  * <a href="https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/">latest TWS docs</a>
  */
-public class IBConnectorImpl implements IBConnector {
+public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
     public static final String CONTRACT_MONTH = "202506";
     private EClientSocket m_client;
@@ -50,8 +50,8 @@ public class IBConnectorImpl implements IBConnector {
         if (connect()) {
             try {
                 switch (action) {
-                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_1, false);
-                    case HISTORICAL -> getMultipleHistoricalData(Duration.DAY_5);
+                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_2);
+                    case HISTORICAL -> saveMultipleHistoricalData(Duration.DAY_5);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // never called
                 }
             } finally{
@@ -63,15 +63,18 @@ public class IBConnectorImpl implements IBConnector {
 
     @Override
     public boolean connect() {
-        EWrapperImpl wrapper = new EWrapperImpl(actions);
+        EWrapperImpl wrapper = new EWrapperImpl(this);
         m_client = wrapper.getClient();
         m_signal = wrapper.getSignal();
 
         m_client.eConnect("127.0.0.1", 7496, 0);
         reader = new EReader(m_client, m_signal);
 
-        NextOrderIdAction action = new NextOrderIdAction(m_client, id, queue);
-        actions.put(action.getRequestId(), action); // this is a dummy action that does not need to be sent
+        var nextOrder = new NextOrderIdAction(m_client, id, queue);
+        actions.put(nextOrder.getRequestId(), nextOrder); // this is a dummy action that does not need to be sent
+
+        var orderManager = new OrderManagerAction(m_client, id, queue);
+        actions.put(orderManager.getRequestId(), orderManager); // this is a dummy action that does not need to be sent)
 
         reader.start();
         new Thread(this::connectionThread).start();
@@ -90,7 +93,7 @@ public class IBConnectorImpl implements IBConnector {
     @Override
     public void disconnect() {
         if (!actions.isEmpty()) {
-            log.info("ERROR: actions remain in map " + actions.size());
+            log.warn("WARNING: actions remain in map " + actionsToString());
             try {
                 var action = queue.poll(5_000, TimeUnit.MILLISECONDS);
                 if (action != null) {
@@ -114,19 +117,14 @@ public class IBConnectorImpl implements IBConnector {
 
     @Override
     public boolean cancelRealtime() {
-        boolean found = false;
-        for (var action : actions.values()) {
-            if (action instanceof RealTimeBarsAction rtAction) {
-                rtAction.forceCancel();
-                found = true;
-            }
-        }
-        return found;
+        var action = findByType(RealTimeBarsAction.class);
+        action.ifPresent(RealTimeBarsAction::forceCancel);
+        return action.isPresent();
     }
 
-    private void getMultipleHistoricalData(Duration duration) {
-        saveHistoricalData("ES", CONTRACT_MONTH, duration, false);
-        saveHistoricalData("NQ", CONTRACT_MONTH, duration, false);
+    private void saveMultipleHistoricalData(Duration duration) {
+        saveHistoricalData("ES", CONTRACT_MONTH, duration);
+        saveHistoricalData("NQ", CONTRACT_MONTH, duration);
         getHistoricalIndexData("TICK-NYSE", duration, false);
     }
 
@@ -134,7 +132,7 @@ public class IBConnectorImpl implements IBConnector {
      * blocking call waits for an item in the queue and casts to required type
      * the action is removed from the actions map
      */
-    private <T> T takeFromQueue(Class<T> clz) {
+    private <T extends Action> T takeFromQueue(Class<T> clz) {
         try {
             var a = queue.take();
             actions.remove(a.getRequestId());
@@ -144,6 +142,12 @@ public class IBConnectorImpl implements IBConnector {
             log.error("Interrupted while taking from queue", e);
             throw new RuntimeException("Interrupted while taking from queue", e);
         }
+    }
+
+//    @SuppressWarnings("unchecked");
+    private <T extends Action> T takeFromQueue(T action) {
+        Class<T> c = (Class<T>)action.getClass();
+        return takeFromQueue(c);
     }
 
     void connectionThread() {
@@ -159,24 +163,38 @@ public class IBConnectorImpl implements IBConnector {
         }
     }
 
-    public void saveHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
-        keepUpToDate = true;
-        var hdAction = getHistoricalData(symbol, contractMonth, duration, keepUpToDate);
-        processHistoricalData(hdAction, true);
+    @Override
+    public HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
+        var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
+        return requestHistoricalData(contractDetails.contract(), duration, keepUpToDate);
     }
 
     @Override
+    public HistoricalDataAction waitForHistoricalData() {
+
+        return takeFromQueue(HistoricalDataAction.class);
+    }
+
+    /**
+     * requests historical data. returns as soon as historic data is fetched.
+     * if keepUpToDate = true, then the HDAction will continue to be updated until its time limit is reached
+     */
+    @Override
     public HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        requestHistoricalData(contractDetails.contract(), duration, keepUpToDate);
-        return takeFromQueue(HistoricalDataAction.class);
+        var sent = requestHistoricalData(contractDetails.contract(), duration, keepUpToDate);
+        return takeFromQueue(sent);
+    }
+
+    public void saveHistoricalData(String symbol, String contractMonth, Duration duration) {
+        var hdAction = getHistoricalData(symbol, contractMonth, duration, false);
+        processHistoricalData(hdAction, true);
     }
 
     private void getHistoricalIndexData(String symbol, Duration duration, boolean keepUpToDate) {
         var contract = contractFactory.newIndex(symbol);
-        requestHistoricalData(contract, duration, keepUpToDate);
-        var hdAction = takeFromQueue(HistoricalDataAction.class);
-        processHistoricalIndexData(hdAction);
+        var sent = requestHistoricalData(contract, duration, keepUpToDate);
+        processHistoricalIndexData(takeFromQueue(sent));
     }
 
     /**
@@ -243,11 +261,10 @@ public class IBConnectorImpl implements IBConnector {
             sb.append("[/]");
             print(sb);
 
-            var index = history.index();
-            var entry = index.entries().getLast();
-            print(index.intradayInfoAsString(index.makeMessages(entry)));
+            print(history.intradayPriceInfo(-1));
 
             if (fSave) {
+                var index = history.index();
                 path = action.save(index.entries().getFirst().tradeDate());
                 // update repository
                 timeSeriesRepository.get().append(history);
@@ -272,6 +289,33 @@ public class IBConnectorImpl implements IBConnector {
             Thread.sleep(millis);
         } catch (InterruptedException ignored) {}
     }
+
+    @Override
+    public <T extends Action> Optional<T> findByType(Class<T> clz) {
+        for (Action action : actions.values()) {
+            if (clz.isInstance(action)) {
+                return Optional.of(clz.cast(action));
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Action findById(int id) {
+        return actions.get(id);
+    }
+
+    @Override
+    public String actionsToString() {
+        var sb = new StringBuilder();
+        sb.append("[yellow]Action map size = " + actions.size());
+        for (Action value : actions.values()) {
+            sb.append("\n").append(value);
+        }
+        sb.append("[/]\n");
+        return sb.toString();
+    }
+
 
     public record ContractKey(
             String symbol,

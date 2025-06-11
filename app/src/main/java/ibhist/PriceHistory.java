@@ -1,7 +1,6 @@
 package ibhist;
 
 import com.google.common.math.DoubleMath;
-import com.ib.client.Bar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -13,6 +12,8 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+
+import static java.lang.Math.max;
 
 public class PriceHistory implements Serializable {
     private static final Logger log = LogManager.getLogger(PriceHistory.class.getSimpleName());
@@ -273,51 +274,68 @@ public class PriceHistory implements Serializable {
 
 
     /**
-     * returns max values in a sliding window of size 2n+1
+     * returns array of indexes of max values from a slice of nums
+     * in a centered sliding window of size 2n+1
      */
-    Column localMax(String input, int n, String output) {
-        var nums = getColumn(input);
-        var c = newColumn(output);
-        for (int i = 0; i < length(); ++i) {
-            double max = nums[i];
-            boolean isMax = true;
-            int rbound = Math.min(i + n + 1, length());
-            for (int k = Math.max(i - n, 0); k < rbound; ++k) {
-                if (nums[k] > max) {
-                    isMax = false;
-                    break;
+    int[] localMax(double[] nums, int start, int end, int windowsSize) {
+        int m = nums.length;
+        end = (end < 0) ? end + m + 1 : Math.min(end, m);
+        int[] output = new int[256];
+        int outp = 0;
+
+        Deque<Integer> dq = new ArrayDeque<>();
+        for (int i = start; i < end; i++) {
+            // 1) Add the new right boundary index
+            int r = i + windowsSize;
+            if (r < m) {
+                while (!dq.isEmpty() && nums[r] > nums[dq.peekLast()]) {
+                    dq.removeLast();
                 }
+                dq.addLast(r);
             }
-            if (isMax) {
-                c.values[i] = max;
+            // 2) Evict indices left of the window
+            int l = i - windowsSize;
+            while (!dq.isEmpty() && dq.peekFirst() < l) {
+                dq.removeFirst();
+            }
+            // 3) Window max is at dq.peekFirst()
+            if (!dq.isEmpty() && nums[i] == nums[dq.peekFirst()]) {
+                output[outp++] = i;
             }
         }
-        columns.add(c);
-        return c;
+        return Arrays.copyOf(output, outp);
     }
 
     /**
      * returns min values in a sliding window of size 2n+1
      */
-    Column localMin(String input, int n, String output) {
-        var nums = getColumn(input);
-        var c = newColumn(output);
-        for (int i = 0; i < length(); ++i) {
-            double min = nums[i];
-            boolean isMin = true;
-            int rbound = Math.min(i + n + 1, length());
-            for (int k = Math.max(i - n, 0); k < rbound; ++k) {
-                if (nums[k] < min) {
-                    isMin = false;
-                    break;
+    int[] localMin(double[] nums, int start, int end, int windowsSize) {
+        int m = nums.length;
+        end = (end < 0) ? end + m + 1 : Math.min(end, m);
+        int[] output = new int[256];
+        int outp = 0;
+
+        Deque<Integer> dq = new ArrayDeque<>();
+        for (int i = start; i < end; i++) {
+            // 1) Add the new right boundary index
+            int r = i + windowsSize;
+            if (r < m) {
+                while (!dq.isEmpty() && nums[r] < nums[dq.peekLast()]) {
+                    dq.removeLast();
                 }
+                dq.addLast(r);
             }
-            if (isMin) {
-                c.values[i] = min;
+            // 2) Evict indices left of the window
+            int l = i - windowsSize;
+            while (!dq.isEmpty() && dq.peekFirst() > l) {
+                dq.removeFirst();
+            }
+            // 3) Window min is at dq.peekFirst()
+            if (!dq.isEmpty() && nums[i] == nums[dq.peekFirst()]) {
+                output[outp++] = i;
             }
         }
-        columns.add(c);
-        return c;
+        return Arrays.copyOf(output, outp);
     }
 
 
@@ -413,7 +431,7 @@ public class PriceHistory implements Serializable {
         for (int i = start; i < end; i++) {
             double v = xs[i];
             sum += v;
-            max = Math.max(max, v);
+            max = max(max, v);
             min = Math.min(min, v);
         }
         double mean = sum / n;
@@ -428,6 +446,7 @@ public class PriceHistory implements Serializable {
 
     /**
      * standardize a slice of the input values
+     *
      * @return an array the same size as the slice
      */
     static public double[] standardize(double[] values, int start, int end) {
@@ -527,7 +546,7 @@ public class PriceHistory implements Serializable {
         double low = 1e6;
         double vol = 0;
         for (int i = s; i <= e; i++) {
-            high = Math.max(highs[i], high);
+            high = max(highs[i], high);
             low = Math.min(lows[i], low);
             vol += volumes[i];
         }
@@ -667,7 +686,7 @@ public class PriceHistory implements Serializable {
     }
 
     public String asTextTable(int start, int end) {
-        start = Math.max(start, 0);
+        start = max(start, 0);
         end = Math.min(end, length());
         var sb = new StringBuilder();
         sb.append("time  open    high    low     close  volume vwap    ema  ticks strat").append(System.lineSeparator());
@@ -698,17 +717,19 @@ public class PriceHistory implements Serializable {
                     ind += " ▼";
                 }
                 double close = closes[i];
-                double rth_open = 5897.50;
-                sb.append(("%s %.2f [greenib,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %.2f %2.0f %s %s%s%s%s").formatted(
-                            dates[i].toLocalTime(),
-                            opens[i],
-                            highs[i] > prevHi ? 1 : 0, highs[i],
-                            lows[i] < prevLo ? 1 : 0, lows[i],
-                            close,
-                            DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
-                            vwaps[i], emas[i],
-                            (highs[i] - lows[i]) * 4, colourStrat(strats[i]),
-                            trendInd(close, rth_open), trendInd(close, vwaps[i]), trendInd(close, emas[i]), ind))
+                var day = index().entries().getLast();
+                int idxOpen = max(day.euStart(), day.rthStart());
+                double sessionOpen = opens[idxOpen];
+                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %.2f %2.0f %s %s%s%s%s").formatted(
+                                dates[i].toLocalTime(),
+                                opens[i],
+                                highs[i] > prevHi ? 1 : 0, highs[i],
+                                lows[i] < prevLo ? 1 : 0, lows[i],
+                                close,
+                                DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
+                                vwaps[i], emas[i],
+                                (highs[i] - lows[i]) * 4, colourStrat(strats[i]),
+                                trendInd(close, sessionOpen), trendInd(close, vwaps[i]), trendInd(close, emas[i]), ind))
                         .append(System.lineSeparator());
             }
             prevHi = highs[i];
@@ -717,8 +738,19 @@ public class PriceHistory implements Serializable {
         return sb.toString();
     }
 
-    static String trendInd(double x, double y) {
-        return x >= y ? "[green]▲[/]" : "[red]▼[/]";
+    /**
+     * return coloured table of intraday price info
+     * @param i index entry (-1 for last)
+     * @return string of table
+     */
+    public String intradayPriceInfo(int i) {
+        var map = index().makeMessagesMap(i);
+        var sb = new StringBuilder();
+        for (var e : map.reversed().entrySet()) {
+            String s = "%.2f %s".formatted(e.getKey() / 100.0, e.getValue());
+            sb.append(s).append(System.lineSeparator());
+        }
+        return sb.toString();
     }
 
     @Override
@@ -729,6 +761,10 @@ public class PriceHistory implements Serializable {
                 ", size=" + length() +
                 ", from=" + dates[0] +
                 ", to=" + dates[length() - 1] + "]";
+    }
+
+    static String trendInd(double x, double y) {
+        return x >= y ? "[green]▲[/]" : "[red]▼[/]";
     }
 
     public static PriceHistory createFromIBBars(String symbol, List<com.ib.client.Bar> bars) {
@@ -770,64 +806,58 @@ public class PriceHistory implements Serializable {
                     rthEnd > 0);
         }
 
-        public NavigableMap<Long, String> makeMessages(IndexEntry idx) {
-            return makeMessages(idx, null);
+
+        public NavigableMap<Long, String> makeMessagesMap(int i) {
+            int n = indexEntries.size();
+            int ix = (i + n) % n;
+            return makeMessagesMap(indexEntries.get(ix), ix > 0 ? indexEntries.get(ix - 1) : null);
         }
 
-        public NavigableMap<Long, String> makeMessages(IndexEntry idx, IndexEntry prev) {
+
+        public NavigableMap<Long, String> makeMessagesMap(IndexEntry idx, IndexEntry prev) {
             NavigableMap<Long, String> priceMessages = new TreeMap<>();
 
             var b = aggregrate(idx.start(), idx.end());
-            putMessage(priceMessages, b.open(), "%.2f glbx open");
-            putMessage(priceMessages, b.close(), "[yellow]%.2f last (" + b.end().format(DateTimeFormatter.ofPattern("HH:mm")) + ")[/]");
+            putMessage(priceMessages, b.open(), "glbx open");
+            putMessage(priceMessages, b.close(), "[yellow]last (" + b.end().format(DateTimeFormatter.ofPattern("HH:mm")) + ")[/]");
             var c = PriceHistory.this.getColumn("vwap");
-            putMessage(priceMessages, c[idx.end()], "%.2f vwap");
+            putMessage(priceMessages, c[idx.end()], "vwap");
 
             var glbx = aggregrate(idx.start(), idx.euEnd());
-            putMessage(priceMessages, glbx.high(), "%.2f glbx hi");
-            putMessage(priceMessages, glbx.low(), "%.2f glbx lo");
+            putMessage(priceMessages, glbx.high(), "glbx hi");
+            putMessage(priceMessages, glbx.low(), "glbx lo");
 
             if (idx.euStart() >= 0) {
                 var eu = aggregrate(idx.euStart(), idx.euEnd());
-                putMessage(priceMessages, eu.open(), "%.2f eu open");
+                putMessage(priceMessages, eu.open(), "eu open");
             }
 
             if (idx.rthStart() >= 0) {
                 var rth = aggregrate(idx.rthStart(), idx.rthEnd());
-                putMessage(priceMessages, rth.open(), "[green]%.2f open[/]");
-                putMessage(priceMessages, rth.high(), "%.2f high");
-                putMessage(priceMessages, rth.low(), "%.2f low");
+                putMessage(priceMessages, rth.open(), "[green]open[/]");
+                putMessage(priceMessages, rth.high(), "[cyan]high[/]");
+                putMessage(priceMessages, rth.low(), "[red]low[/]");
                 var rthFirstHour = aggregrate(idx.rthStart(), idx.rthStart() + 59);
-                putMessage(priceMessages, rthFirstHour.high(), "%.2f H1 hi");
-                putMessage(priceMessages, rthFirstHour.low(), "%.2f H1 lo");
+                putMessage(priceMessages, rthFirstHour.high(), "H1 hi");
+                putMessage(priceMessages, rthFirstHour.low(), "H1 lo");
             }
 
             if (prev != null && prev.rthStart() >= 0) {
                 var rth = aggregrate(prev.rthStart(), prev.rthEnd());
-                putMessage(priceMessages, rth.high(), "[cyan]%.2f yh[/]");
-                putMessage(priceMessages, rth.low(), "[red]%.2f yl[/]");
-                putMessage(priceMessages, rth.close(), "%.2f yc");
+                putMessage(priceMessages, rth.high(), "[cyan]yh[/]");
+                putMessage(priceMessages, rth.low(), "[red]yl[/]");
+                putMessage(priceMessages, rth.close(), "yc");
             }
             return priceMessages;
         }
 
         // add message for price level, concatenate with any existing message for same price
-        private String putMessage(NavigableMap<Long,String> map,
+        private static String putMessage(NavigableMap<Long, String> map,
                                   double price,
-                                  String fmt) {
-            String msg = fmt.formatted(price);
-            long key   = Math.round(price * 100);
-
-            return map.merge(key, msg, (oldVal, newVal) -> oldVal + ", " + newVal);
+                                  String msg) {
+            return map.merge(Math.round(price * 100), msg, (oldVal, newVal) -> oldVal + ", " + newVal);
         }
 
-        public String intradayInfoAsString(NavigableMap<Long, String> map) {
-            var sb = new StringBuilder();
-            for (String s : map.reversed().values()) {
-                sb.append(s).append(System.lineSeparator());
-            }
-            return sb.toString();
-        }
 
         List<IndexEntry> entries() {
             return Collections.unmodifiableList(indexEntries);
@@ -851,7 +881,7 @@ public class PriceHistory implements Serializable {
         public Bar mergeRealTimeBar(RealTimeBar bar) {
             return new PriceHistory.Bar(start(), bar.dt(),
                     open(),
-                    Math.max(high(), bar.high()),
+                    max(high(), bar.high()),
                     Math.min(low(), bar.low()),
                     bar.close(),
                     volume() + bar.volume(), bar.wap());
@@ -866,9 +896,10 @@ public class PriceHistory implements Serializable {
         }
 
         public String asIntradayBar(boolean isNH, boolean isNL, boolean isNV) {
-            return "%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/d] %.2f [yellow,%d]%5.0f[/] %.2f".formatted(start.toLocalTime(), open, isNH ? 1 : 0, high, isNL ? 1 : 0, low, close, isNV ? 1 : 0 ,volume, vwap);
+            return "%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/d] %.2f [yellow,%d]%5.0f[/] %.2f".formatted(start.toLocalTime(), open, isNH ? 1 : 0, high, isNL ? 1 : 0, low, close, isNV ? 1 : 0, volume, vwap);
         }
     }
 
-    public record SummaryStats(int count, double sum, double max, double min, double mean, double stdDev) {}
+    public record SummaryStats(int count, double sum, double max, double min, double mean, double stdDev) {
+    }
 }

@@ -122,8 +122,7 @@ class PriceHistoryRepositoryTest {
 
     private static PriceHistory getPriceHistory() {
         var repository = new PriceHistoryRepository();
-        var history = repository.load("esz4").get();
-        return history;
+        return repository.load("esz4").get();
     }
 
     record Point(int index, double value, int count) {

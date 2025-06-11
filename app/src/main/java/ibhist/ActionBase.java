@@ -39,4 +39,9 @@ public abstract  class ActionBase implements Action {
 
     @Override
     public void cancel() {}
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + " " + requestId;
+    }
 }

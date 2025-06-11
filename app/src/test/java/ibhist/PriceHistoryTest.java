@@ -7,10 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
-import static ibhist.ActionBase.log;
 import static ibhist.StringUtils.print;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -161,9 +159,8 @@ class PriceHistoryTest {
         var ph = new PriceHistory("ES", xs.length, INPUT);
         ph.setLength(xs.length);
         ph.setColumnValues(INPUT, xs);
-        var ys = ph.localMax(INPUT, 2, OUTPUT);
-        assertThat(ys.values.length).isEqualTo(xs.length);
-        assertThat(ys.values).containsExactly(0, 0, 3, 0, 0, 0, 3, 0, 0, 10);
+        var ys = ph.localMax(xs, 0, -1, 2);
+        assertThat(ys).containsExactly(2, 6, 9);
     }
 
     @Test
@@ -239,8 +236,15 @@ class PriceHistoryTest {
 
     @Test
     void test_rising_trend() {
-        var history = rising_trend();
-        var ys = history.hilo("close", "hilo");
+        var history = test_price_history(128, 0.01);
+        var hilo = history.hilo("close", "hilo");
+        assertThat(hilo.values.length).isEqualTo(128);
+        assertThat(hilo.values[16]).isEqualTo(16);
+        assertThat(hilo.values[17]).isEqualTo(0);
+        assertThat(hilo.values[18]).isEqualTo(-2);
+        assertThat(hilo.values[79]).isEqualTo(79);
+        assertThat(hilo.values[80]).isEqualTo(0);
+        assertThat(hilo.values[81]).isEqualTo(-2);
 
         var b = history.aggregrate(120, 127);
         assertThat(b.open()).isEqualTo(114.25, Offset.offset(1e-6));
@@ -248,47 +252,20 @@ class PriceHistoryTest {
         assertThat(b.volume()).isEqualTo(800);
 
         var highs = history.getColumn("high");
-        var lows = history.getColumn("low");
-        var highPoints = new ArrayList<Point>();
-        var lowPoints = new ArrayList<Point>();
-        double hiwm = -1e6;
-        double lowm = 1e6;
-        var sb = new StringBuilder();
-        for (int live = 40; live < 60; live++) {
-            int sz = 5;
-            var bar2 = history.aggregrate(live - 2 * sz, live - sz - 1);
-            var bar1 = history.aggregrate(live - sz, live - 1);
-            if (bar1.low() < bar2.low()) { // 2 down
-                sb.append("long entry trigger over %f low %f\n".formatted(bar1.high(), bar1.low()));
-                if (history.bar(live).high() > bar1.high())
-                    sb.append("triggered\n").append(history.asTextTable(live + 1));
-            }
-        }
-        print(sb);
-        for (int i = 60; i >= 0; i--) {
-            double h = highs[i];
-            double l = lows[i];
-            if (h > hiwm) {
-                int c = highPoints.isEmpty() ? 0 : i - highPoints.getFirst().index;
-                highPoints.add(new Point(i, h, c));
-                hiwm = h;
-            }
-            if (l < lowm) {
-                int c = lowPoints.isEmpty() ? 0 : i - lowPoints.getFirst().index;
-                lowPoints.add(new Point(i, l, c));
-                lowm = l;
-            }
-        }
-        Point last = null;
-        for (var p : highPoints) {
-            if (last != null) {
-                if (p.count > 19)
-                    log.info("over %.2f".formatted(last.value));
-                log.info("%s %s".formatted(history.dates[p.index].toLocalTime(), p));
-            }
-            last = p;
-        }
-        log.info(history.printBars(highPoints.getLast().index));
+        var lmax = history.localMax(highs, 0, -1, 5);
+        assertThat(lmax).containsExactly(16,17,79,80, 127);
+
+//        assertThat(lmax.values.length).isEqualTo(128);
+//        assertThat(lmax.values[16]).isEqualTo(130);
+//        assertThat(lmax.values[17]).isEqualTo(130);
+//        assertThat(lmax.values[18]).isEqualTo(0);
+//        assertThat(lmax.values[79]).isEqualTo(145.75);
+//        assertThat(lmax.values[80]).isEqualTo(145.75);
+//        assertThat(lmax.values[81]).isEqualTo(0);
+//        var cl = history.getColumn("close");
+//        for (int i = 0; i < 128; i++) {
+//            print("%s %.2f %.0f %.2f", history.dates[i].toLocalTime(),  cl[i], hilo.values[i], lmax.values[i]);
+//        }
     }
 
     @Test
@@ -301,15 +278,14 @@ class PriceHistoryTest {
         assertThat(history.getDates()[0]).isEqualTo(LocalDateTime.of(2023, 9, 19, 23, 0, 0));
     }
 
-
-
-    private PriceHistory rising_trend() {
+    // n = 128 skew 0.01
+    // generate sine wave price history with skew starts at 14:30 so Index entries not valid
+    private PriceHistory test_price_history(int n, double skew) {
         LocalDateTime dt = LocalDate.now().atTime(14, 30);
         var history = new PriceHistory("ES", 128, "date", "open", "high", "low", "close", "volume");
-        StringBuilder sb = new StringBuilder();
         double open = 100;
-        for (int i = 0; i < 128; i++) {
-            double d = generatePrice(i, 0.01);
+        for (int i = 0; i < n; i++) {
+            double d = generatePrice(i, skew);
             history.add(dt.plusMinutes(i), open, d + 1, d - 1, d, 100);
             open = d;
         }

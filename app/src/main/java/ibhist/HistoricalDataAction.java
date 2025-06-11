@@ -37,7 +37,7 @@ public class HistoricalDataAction extends ActionBase {
         this.contract = contract;
         this.duration = duration;
         this.keepUpToDate = keepUpToDate;
-        this.updateUntil = keepUpToDate ? LocalDateTime.now().plusMinutes(5) : null;
+        this.updateUntil = keepUpToDate ? LocalDateTime.now().plusMinutes(15) : null;
     }
 
     public Contract getContract() {
@@ -62,11 +62,11 @@ public class HistoricalDataAction extends ActionBase {
         complete(); // base class will queue response
     }
 
-    public void process(Bar bar) {
+    public void onHistoricalData(Bar bar) {
         bars.add(bar);
     }
 
-    public void processEnd() {
+    public void onHistoricalDataEnd() {
         // marks end of historic data. if keepUpToDate=true future updates will be streamed
         // via processUpdate so this will not be the end
         if (!keepUpToDate) {
@@ -74,7 +74,7 @@ public class HistoricalDataAction extends ActionBase {
         }
     }
 
-    public void processUpdate(Bar bar) {
+    public void onHistoricalDataUpdate(Bar bar) {
 //        log.info(barToCsv(currentBarCount, bar));
         if (bar.volume().longValue() < 0) {
             log.info("ignoring bar with neg vol " + bar.time());

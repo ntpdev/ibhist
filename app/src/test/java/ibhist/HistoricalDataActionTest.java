@@ -44,12 +44,12 @@ class HistoricalDataActionTest {
     }
 
     @Test
-    void test_process_captures_bars_and_formats() throws InterruptedException {
+    void test_onHistoricalData_captures_bars_and_formats() throws InterruptedException {
         BlockingQueue<Action> mockQueue = mock(BlockingQueue.class);
 
         var action = new HistoricalDataAction(null, new AtomicInteger(), mockQueue, new Contract(), Duration.DAY_1, false);
-        action.process(newBar(4983d, 0));
-        action.process(newBar(4984d, 1));
+        action.onHistoricalData(newBar(4983d, 0));
+        action.onHistoricalData(newBar(4984d, 1));
 
         action.complete();
 

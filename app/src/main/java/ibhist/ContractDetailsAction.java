@@ -34,7 +34,7 @@ public class ContractDetailsAction extends ActionBase {
         client.reqContractDetails(requestId, contract);
     }
 
-    public void process(ContractDetails contractDetails) {
+    public void onContractDetails(ContractDetails contractDetails) {
         this.contractDetails = contractDetails;
         this.contract = contractDetails.contract();
     }
