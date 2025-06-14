@@ -272,73 +272,6 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
-
-    /**
-     * returns array of indexes of max values from a slice of nums
-     * in a centered sliding window of size 2n+1
-     */
-    int[] localMax(double[] nums, int start, int end, int windowsSize) {
-        int m = nums.length;
-        end = (end < 0) ? end + m + 1 : Math.min(end, m);
-        int[] output = new int[256];
-        int outp = 0;
-
-        Deque<Integer> dq = new ArrayDeque<>();
-        for (int i = start; i < end; i++) {
-            // 1) Add the new right boundary index
-            int r = i + windowsSize;
-            if (r < m) {
-                while (!dq.isEmpty() && nums[r] > nums[dq.peekLast()]) {
-                    dq.removeLast();
-                }
-                dq.addLast(r);
-            }
-            // 2) Evict indices left of the window
-            int l = i - windowsSize;
-            while (!dq.isEmpty() && dq.peekFirst() < l) {
-                dq.removeFirst();
-            }
-            // 3) Window max is at dq.peekFirst()
-            if (!dq.isEmpty() && nums[i] == nums[dq.peekFirst()]) {
-                output[outp++] = i;
-            }
-        }
-        return Arrays.copyOf(output, outp);
-    }
-
-    /**
-     * returns min values in a sliding window of size 2n+1
-     */
-    int[] localMin(double[] nums, int start, int end, int windowsSize) {
-        int m = nums.length;
-        end = (end < 0) ? end + m + 1 : Math.min(end, m);
-        int[] output = new int[256];
-        int outp = 0;
-
-        Deque<Integer> dq = new ArrayDeque<>();
-        for (int i = start; i < end; i++) {
-            // 1) Add the new right boundary index
-            int r = i + windowsSize;
-            if (r < m) {
-                while (!dq.isEmpty() && nums[r] < nums[dq.peekLast()]) {
-                    dq.removeLast();
-                }
-                dq.addLast(r);
-            }
-            // 2) Evict indices left of the window
-            int l = i - windowsSize;
-            while (!dq.isEmpty() && dq.peekFirst() > l) {
-                dq.removeFirst();
-            }
-            // 3) Window min is at dq.peekFirst()
-            if (!dq.isEmpty() && nums[i] == nums[dq.peekFirst()]) {
-                output[outp++] = i;
-            }
-        }
-        return Arrays.copyOf(output, outp);
-    }
-
-
     public Column hilo(String input, String output) {
         double[] xs = getColumn(input);
         var c = newColumn(output);
@@ -689,7 +622,7 @@ public class PriceHistory implements Serializable {
         start = max(start, 0);
         end = Math.min(end, length());
         var sb = new StringBuilder();
-        sb.append("time  open    high    low     close  volume vwap    ema  ticks strat").append(System.lineSeparator());
+        sb.append("time  open    high    low     close  volume nvol vwap    ema  ticks strat chi clo").append(System.lineSeparator());
         var dates = getDates();
         var opens = getColumn("open");
         var highs = getColumn("high");
@@ -702,6 +635,9 @@ public class PriceHistory implements Serializable {
         var highStats = summaryStats(highs, start, end);
         var lowStats = summaryStats(lows, start, end);
         var volumeStats = summaryStats(volumes, start, end);
+        var nvol = ArrayUtils.rollingStandardize(volumes, 0, 0, 20);
+        var countHi = ArrayUtils.countPrior(highs, 0, 0, (a, b) -> a > b);
+        var countLo = ArrayUtils.countPrior(lows, 0, 0, (a, b) -> a < b);
 //        var maxs = getColumn("highm5")
         double prevHi = highs[start];
         double prevLo = lows[start];
@@ -720,15 +656,17 @@ public class PriceHistory implements Serializable {
                 var day = index().entries().getLast();
                 int idxOpen = max(day.euStart(), day.rthStart());
                 double sessionOpen = opens[idxOpen];
-                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] %.2f %.2f %2.0f %s %s%s%s%s").formatted(
+                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] [yellow,%d]%4.0f[/] %.2f %.2f %2.0f %s [green,%d]%3d[/] [red,%d]%3d[/] %s%s%s%s").formatted(
                                 dates[i].toLocalTime(),
                                 opens[i],
                                 highs[i] > prevHi ? 1 : 0, highs[i],
                                 lows[i] < prevLo ? 1 : 0, lows[i],
                                 close,
                                 DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
+                                nvol[i] > 99 ? 1 : 0, nvol[i],
                                 vwaps[i], emas[i],
                                 (highs[i] - lows[i]) * 4, colourStrat(strats[i]),
+                                countHi[i] > 14 ? 1 : 0, countHi[i], countLo[i] > 14 ? 1 : 0, countLo[i],
                                 trendInd(close, sessionOpen), trendInd(close, vwaps[i]), trendInd(close, emas[i]), ind))
                         .append(System.lineSeparator());
             }

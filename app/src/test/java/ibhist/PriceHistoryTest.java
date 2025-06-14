@@ -154,27 +154,6 @@ class PriceHistoryTest {
     }
 
     @Test
-    void local_max() {
-        double[] xs = {1, 2, 3, 2, 1, 2, 3, 2, 1, 10};
-        var ph = new PriceHistory("ES", xs.length, INPUT);
-        ph.setLength(xs.length);
-        ph.setColumnValues(INPUT, xs);
-        var ys = ph.localMax(xs, 0, -1, 2);
-        assertThat(ys).containsExactly(2, 6, 9);
-    }
-
-    @Test
-    void local_min() {
-        double[] xs = {5, 4, 3, 4, 5, 4, 3, 4, 5, 1};
-        var ph = new PriceHistory("ES", xs.length, INPUT);
-        ph.setLength(xs.length);
-        ph.setColumnValues(INPUT, xs);
-        var ys = ph.localMin(INPUT, 2, OUTPUT);
-        assertThat(ys.values.length).isEqualTo(xs.length);
-        assertThat(ys.values).containsExactly(0, 0, 3, 0, 0, 0, 3, 0, 0, 1);
-    }
-
-    @Test
     void ema_step() {
         double[] xs = {100, 100, 100, 100, 200, 200, 200, 200};
         var ph = new PriceHistory("ES", xs.length, INPUT);
@@ -252,20 +231,6 @@ class PriceHistoryTest {
         assertThat(b.volume()).isEqualTo(800);
 
         var highs = history.getColumn("high");
-        var lmax = history.localMax(highs, 0, -1, 5);
-        assertThat(lmax).containsExactly(16,17,79,80, 127);
-
-//        assertThat(lmax.values.length).isEqualTo(128);
-//        assertThat(lmax.values[16]).isEqualTo(130);
-//        assertThat(lmax.values[17]).isEqualTo(130);
-//        assertThat(lmax.values[18]).isEqualTo(0);
-//        assertThat(lmax.values[79]).isEqualTo(145.75);
-//        assertThat(lmax.values[80]).isEqualTo(145.75);
-//        assertThat(lmax.values[81]).isEqualTo(0);
-//        var cl = history.getColumn("close");
-//        for (int i = 0; i < 128; i++) {
-//            print("%s %.2f %.0f %.2f", history.dates[i].toLocalTime(),  cl[i], hilo.values[i], lmax.values[i]);
-//        }
     }
 
     @Test

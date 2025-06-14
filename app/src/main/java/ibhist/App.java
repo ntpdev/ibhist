@@ -19,7 +19,7 @@ public class App {
         log.info(System.getProperty("java.version"));
         var injector = Guice.createInjector(new AppModule());
         if (args.length == 0) {
-            injector.getInstance(IBConnector.class).process(IBConnector.ConnectorAction.ES_DAY);
+            injector.getInstance(IBConnector.class).process(IBConnector.ConnectorAction.HISTORICAL);
         } else {
             injector.getInstance(Repl.class).run();
         }

@@ -27,7 +27,8 @@ public class ReplImpl implements Repl {
     private static final DateTimeFormatter tradeDateformatter = DateTimeFormatter.ofPattern("EEE d MMMM");
     private final IBConnector connector;
     private final TimeSeriesRepository tsRepository;
-    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
+//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
+    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
     private PriceHistory history = null;
 
 
@@ -41,7 +42,7 @@ public class ReplImpl implements Repl {
         try {
             runImpl();
         } catch (Exception e) {
-            log.error(e);
+            log.error("ReplIml unhandled exception", e);
         }
         print("[blue]bye[/]");
     }
@@ -104,6 +105,7 @@ public class ReplImpl implements Repl {
                 var path = action.save(history.index().entries().getFirst().tradeDate());
                 tsRepository.append(history);
                 print(history.toString());
+                print(history.intradayPriceInfo(-1));
                 yield true;
             }
             case "stream" -> {
@@ -183,20 +185,27 @@ public class ReplImpl implements Repl {
     }
 
     private void printMinMax(int n) {
-//        var hi = history.localMin("high", n, "local_high"); //TODO hacked from localMax
-//        var lo = history.localMin("low", n, "local_low");
+        var ix = history.indexEntry(-1);
+        var swings = ArrayUtils.findSwings(history.getColumn("high"), history.getColumn("low"), ix.start(), ix.end(), n);
+
         StringBuilder sb = new StringBuilder();
-//        sb.append("\n[yellow]local high / low %d[/]\n".formatted(n));
-//        for (int i = history.length() - 240; i < history.length(); ++i) {
-//            if (hi.values[i] > 0) {
-//                sb.append(String.format("[green]%s %.2f hi ▲[/]\n", history.getDates()[i].toLocalTime(), hi.values[i]));
-//            }
-//            if (lo.values[i] > 0) {
-//                sb.append(String.format("[red]%s %.2f lo ▼[/]\n", history.getDates()[i].toLocalTime(), lo.values[i]));
-//            }
-//        }
-        sb.append("[yellow]---[/]");
+        sb.append("--- minmax ").append(n).append("\n");
+        for (var s : swings) {
+            String col = s.type() == ArrayUtils.PointType.LOCAL_HIGH ? "[green]" : "[red]";
+            sb.append(col).append(history.bar(s.index()).asIntradayBar()).append("[/]\n");
+        }
         print(sb.toString());
+        var vol = history.getColumn("volume");
+        var stdvol = ArrayUtils.rollingStandardize(vol, 0, 0, 20);
+        var high = history.getColumn("high");
+        var low = history.getColumn("low");
+        int[] countHighs = ArrayUtils.countPrior(high, 0, 0, (a, b) -> a > b);
+        int[] countLows = ArrayUtils.countPrior(low, 0, 0, (a, b) -> a < b);
+        print("hello");
+        // times ~15:30
+        for (int i = ix.rthStart() + 35; i < ix.rthStart() + 85; ++i) {
+            log.info("%2d %s %.2f %.2f %d %d".formatted(i, history.dates[i], vol[i], stdvol[i], countHighs[i], countLows[i]));
+        }
     }
 
     void load(String s) {
@@ -222,7 +231,8 @@ public class ReplImpl implements Repl {
         PriceHistory.IndexEntry entry = entries.get(n);
         var sb = new StringBuilder();
         String formattedDate = entry.tradeDate().format(tradeDateformatter.withLocale(Locale.ENGLISH));
-        sb.append("\n[yellow]---\ntrade date ").append(formattedDate).append("[/]\n\n");
+        sb.append("\n[yellow]---\ntrade date ").append(formattedDate).append("[/]\n");
+        print(sb);
         print(history.intradayPriceInfo(n));
         //TODO: figure this out and add to history.print to can see volume spikes
 //        if (entry.rthStart() > 0) {

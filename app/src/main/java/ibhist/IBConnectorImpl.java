@@ -159,7 +159,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             }
             log.info("connectionThread: ended");
         } catch (Exception e) {
-            log.error(e);
+            log.error("unhandled exception in connectionThread", e);
         }
     }
 
