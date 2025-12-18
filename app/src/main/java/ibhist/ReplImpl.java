@@ -27,8 +27,8 @@ public class ReplImpl implements Repl {
     private static final DateTimeFormatter tradeDateformatter = DateTimeFormatter.ofPattern("EEE d MMMM");
     private final IBConnector connector;
     private final TimeSeriesRepository tsRepository;
-//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
-    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
+    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
+//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
     private PriceHistory history = null;
 
 
@@ -68,7 +68,9 @@ public class ReplImpl implements Repl {
                 } else if (noun.equals("tws")) { // conn disc
                     processTws(input);
                 } else if (noun.equals("es")) { // show stream end-stream
-                    requestHistoricData(cmd);
+                    requestHistoricData(cmd, monitorManager);
+                } else if (noun.equals("monitor")) {
+                    processMonitorCommand(input, monitorManager);
                 } else if (cmd.equals("rt")) {
                     processRt(input, monitorManager);
                 } else if (cmd.equals("minmax") && history != null) {
@@ -96,20 +98,32 @@ public class ReplImpl implements Repl {
         reader.close();
     }
 
-    private boolean requestHistoricData(String cmd) {
+    private void processMonitorCommand(List<String> input, MonitorManager monitorManager) {
+        if (input.getFirst().equals("list")) {
+            print(monitorManager.toString());
+        } else {
+            monitorManager.processCommand(input);
+        }
+    }
+
+    private boolean requestHistoricData(String cmd, MonitorManager monitorManager) {
         return switch (cmd) {
+            case "limit" -> {
+                connector.buildOrder("MES");
+                yield true;
+            }
             case "show" -> {
-                var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, false);
+                var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1);
                 history = action.asPriceHistory();
                 print(history.toString());
-                var path = action.save(history.index().entries().getFirst().tradeDate());
+                var path = action.save(history.indexEntry(0).tradeDate());
                 tsRepository.append(history);
                 print(history.toString());
                 print(history.intradayPriceInfo(-1));
                 yield true;
             }
             case "stream" -> {
-                connector.requestHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true);
+                connector.requestHistoricalData("MES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true, monitorManager);
                 yield true;
             }
             case "end-stream" -> {
@@ -119,7 +133,7 @@ public class ReplImpl implements Repl {
                             var action = connector.waitForHistoricalData();
                             history = action.asPriceHistory();
                             print(history.toString());
-                            var path = action.save(history.index().entries().getFirst().tradeDate());
+                            var path = action.save(history.indexEntry(0).tradeDate());
                         });
                 yield true;
             }
@@ -195,17 +209,9 @@ public class ReplImpl implements Repl {
             sb.append(col).append(history.bar(s.index()).asIntradayBar()).append("[/]\n");
         }
         print(sb.toString());
-        var vol = history.getColumn("volume");
-        var stdvol = ArrayUtils.rollingStandardize(vol, 0, 0, 20);
-        var high = history.getColumn("high");
-        var low = history.getColumn("low");
-        int[] countHighs = ArrayUtils.countPrior(high, 0, 0, (a, b) -> a > b);
-        int[] countLows = ArrayUtils.countPrior(low, 0, 0, (a, b) -> a < b);
-        print("hello");
-        // times ~15:30
-        for (int i = ix.rthStart() + 35; i < ix.rthStart() + 85; ++i) {
-            log.info("%2d %s %.2f %.2f %d %d".formatted(i, history.dates[i], vol[i], stdvol[i], countHighs[i], countLows[i]));
-        }
+        // TODO place order relative to high
+        var orderGroup = OrderBuilder.createSellRelativeToHigh(history, 10, 32, 10);
+        connector.placeOrders("MES", orderGroup);
     }
 
     void load(String s) {

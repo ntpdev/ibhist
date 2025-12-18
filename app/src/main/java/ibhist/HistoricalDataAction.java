@@ -1,8 +1,6 @@
 package ibhist;
 
-import com.ib.client.Bar;
-import com.ib.client.Contract;
-import com.ib.client.EClientSocket;
+import com.ib.client.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,15 +27,19 @@ public class HistoricalDataAction extends ActionBase {
     private final boolean keepUpToDate;
     private final LocalDateTime updateUntil;
     private final List<Bar> bars = new ArrayList<>();
+    private final MonitorManager monitorManager;
+    private final List<PriceMonitor> monitors = new ArrayList<>();
     private PriceHistory hist = null;
     private int currentBarCount = 99;
+    private boolean init = false;
 
-    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration, boolean keepUpToDate) {
+    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration, boolean keepUpToDate, MonitorManager monitorManager) {
         super(client, idGenerator, queue);
         this.contract = contract;
         this.duration = duration;
         this.keepUpToDate = keepUpToDate;
         this.updateUntil = keepUpToDate ? LocalDateTime.now().plusMinutes(15) : null;
+        this.monitorManager = monitorManager;
     }
 
     public Contract getContract() {
@@ -53,6 +55,8 @@ public class HistoricalDataAction extends ActionBase {
 //        var d = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusMinutes(1);
 //        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss")); 20231001 22:00:00
         log.info("reqHistoricalData reqId = {} symbol = {} duration = {}", requestId, contract.localSymbol(), duration.getCode());
+        // add end explicit end date to get up to that point
+//        client.reqHistoricalData(requestId, contract, "20250718 23:00:00 Europe/London", duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
         client.reqHistoricalData(requestId, contract, "", duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
     }
 
@@ -80,10 +84,17 @@ public class HistoricalDataAction extends ActionBase {
             log.info("ignoring bar with neg vol " + bar.time());
             return;
         }
+        if (!init) {
+            init();
+            init = true;
+        }
         // replace or insert bar
         if (bars.getLast().time().equals(bar.time())) {
             bars.removeLast();
             bars.add(bar);
+            for (var m : monitors) {
+                m.test(bar.close());
+            }
             // show history when last bar of current minute received
             if (--currentBarCount == 0) {
 //                int n = bars.size();
@@ -101,6 +112,12 @@ public class HistoricalDataAction extends ActionBase {
 
         if (keepUpToDate && currentBarCount == 0 && parseTime(bar).isAfter(updateUntil)) {
             cancel();
+        }
+    }
+
+    private void init() {
+        for (var data : monitorManager) {
+            monitors.add(new PriceMonitor(data, this::eventHandler));
         }
     }
 //        log.info(barToCsv(n, bars.get(n)));
@@ -183,6 +200,18 @@ public class HistoricalDataAction extends ActionBase {
         } catch (IOException e) {
             log.error(e);
             throw new RuntimeException("error saving historical data", e);
+        }
+    }
+
+    private void eventHandler(PriceEvent event) {
+        log.info(event.toString());
+        switch (event.state()) {
+            case ChangeState.entry -> {
+                var ord = new OrderDetails(Types.Action.BUY, OrderType.LMT, 6049.50, 1, Types.TimeInForce.DAY);
+                var group = ord.createOrderGroup(32, 32);
+//                new OrderBuilder(null, null).placeOrders(group);
+            }
+
         }
     }
 

@@ -28,7 +28,7 @@ import java.util.zip.GZIPOutputStream;
 
 public class PriceHistoryRepository {
 
-    private static final Logger log = LogManager.getLogger("PriceHistoryRepository");
+    private static final Logger log = LogManager.getLogger(PriceHistoryRepository.class.getSimpleName());
     // will use Guava splitter rather than regex \s+
     static final Splitter COMMA_SPLITTER = Splitter.on(",").trimResults();
     static final Splitter WS_SPLITTER = Splitter.on(CharMatcher.whitespace()).omitEmptyStrings();

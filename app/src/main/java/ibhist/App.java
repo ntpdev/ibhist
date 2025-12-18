@@ -11,17 +11,45 @@ public class App {
     private static final Logger log = LogManager.getLogger(App.class.getSimpleName());
 
     /**
-     * If run without parameters to load function otherwise call repl class
-     * There are 2 project run configs for running the app and running the repl
-     * @param args
+     * Command line application that processes different modes based on arguments:
+     * - "hist": Historical data processing
+     * - "day": ES day data processing
+     * - "rt": Real-time data processing
+     * - "repl": Interactive REPL mode
+     * - No argument or blank: defaults to "day"
+     *
+     * @param args command line arguments
      */
     public static void main(String[] args) {
-        log.info(System.getProperty("java.version"));
+        log.info("Java version: {}", System.getProperty("java.version"));
+
         var injector = Guice.createInjector(new AppModule());
-        if (args.length == 0) {
-            injector.getInstance(IBConnector.class).process(IBConnector.ConnectorAction.HISTORICAL);
-        } else {
-            injector.getInstance(Repl.class).run();
+
+        // Determine the command - default to "day" if no args or empty
+        String command = (args.length == 0) ? "day" : args[0].toLowerCase().trim();
+        log.info("ibhist '{}'", command);
+
+        switch (command) {
+            case "hist" -> {
+                var ibConnector = injector.getInstance(IBConnector.class);
+                ibConnector.process(IBConnector.ConnectorAction.HISTORICAL);
+            }
+            case "day" -> {
+                var ibConnector = injector.getInstance(IBConnector.class);
+                ibConnector.process(IBConnector.ConnectorAction.ES_DAY);
+            }
+            case "rt" -> {
+                var ibConnector = injector.getInstance(IBConnector.class);
+                ibConnector.process(IBConnector.ConnectorAction.REALTIME);
+            }
+            case "repl" -> {
+                injector.getInstance(Repl.class).run();
+            }
+            default -> {
+                log.error("Unknown command: '{}'. Valid options: hist, day, rt, repl", command);
+                System.err.println("Usage: java ibhist.App [hist|day|rt|repl]");
+                System.exit(1);
+            }
         }
     }
 }

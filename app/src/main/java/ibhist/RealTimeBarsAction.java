@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoublePredicate;
 
 public class RealTimeBarsAction extends ActionBase {
+
     private final Contract contract;
     private final RealTimeHistory bars = new RealTimeHistory();
     private final List<DoublePredicate> monitors = new ArrayList<>();
@@ -26,7 +27,7 @@ public class RealTimeBarsAction extends ActionBase {
         this.maxBars = maxBars;
     }
 
-    private void priceTriggered(RealTimeHistory.PriceEvent event) {
+    private void priceTriggered(PriceEvent event) {
         log.info(event);
     }
 

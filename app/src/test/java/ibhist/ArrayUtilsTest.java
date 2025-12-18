@@ -1,10 +1,6 @@
 package ibhist;
 
-import org.assertj.core.api.AbstractListAssert;
-import org.assertj.core.api.ObjectAssert;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static ibhist.ArrayUtils.PointType.LOCAL_HIGH;
 import static ibhist.ArrayUtils.PointType.LOCAL_LOW;

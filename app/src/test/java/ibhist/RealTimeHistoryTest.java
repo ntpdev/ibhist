@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static ibhist.RealTimeHistory.ChangeState.*;
+import static ibhist.ChangeState.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
@@ -14,7 +14,7 @@ class RealTimeHistoryTest {
     @Test
     void notifier_price_greater_events() {
         // capture all events
-        List<RealTimeHistory.PriceEvent> events = new ArrayList<>();
+        List<PriceEvent> events = new ArrayList<>();
 
         // the monitor under test: threshold >120.0, minLength=3, collect to our list
         var monitor = new RealTimeHistory.PriceMonitor(new MonitorManager.MonitorData("",price -> price > 120.0, 3), events::add);
@@ -31,8 +31,8 @@ class RealTimeHistoryTest {
 
         // and we know exactly which state/price tuples they should be in order:
         assertThat(events)
-                .extracting(RealTimeHistory.PriceEvent::state,
-                        RealTimeHistory.PriceEvent::price)
+                .extracting(PriceEvent::state,
+                        PriceEvent::price)
                 .containsExactly(
                         // first crossing – 1 entry + 10 insides + 1 exit
                         tuple(entry, 123.25),
@@ -65,7 +65,7 @@ class RealTimeHistoryTest {
     @Test
     void consecutive_events_required_for_events() {
         // capture events
-        List<RealTimeHistory.PriceEvent> events = new ArrayList<>();
+        List<PriceEvent> events = new ArrayList<>();
 
         // predicate: price < 100, minLength=2, handler collects to our list
         var monitor = new RealTimeHistory.PriceMonitor(new MonitorManager.MonitorData("", price -> price < 100.0, 2), events::add);
@@ -88,8 +88,8 @@ class RealTimeHistoryTest {
 
         // and in order: entry@90, inside@85, exit@110
         assertThat(events)
-                .extracting(RealTimeHistory.PriceEvent::state,
-                        RealTimeHistory.PriceEvent::price)
+                .extracting(PriceEvent::state,
+                        PriceEvent::price)
                 .containsExactly(
                         tuple(entry,  90.0),
                         tuple(inside, 85.0),

@@ -7,10 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +21,7 @@ import static ibhist.StringUtils.print;
  */
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
-    public static final String CONTRACT_MONTH = "202506";
+    public static final String CONTRACT_MONTH = "202509";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -50,11 +47,11 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         if (connect()) {
             try {
                 switch (action) {
-                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_2);
-                    case HISTORICAL -> saveMultipleHistoricalData(Duration.DAY_5);
+                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_10);
+                    case HISTORICAL -> saveMultipleHistoricalData(Duration.DAY_10);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // never called
                 }
-            } finally{
+            } finally {
                 disconnect();
             }
         }
@@ -125,7 +122,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     private void saveMultipleHistoricalData(Duration duration) {
         saveHistoricalData("ES", CONTRACT_MONTH, duration);
         saveHistoricalData("NQ", CONTRACT_MONTH, duration);
-        getHistoricalIndexData("TICK-NYSE", duration, false);
+        getHistoricalIndexData("TICK-NYSE", duration);
     }
 
     /**
@@ -144,9 +141,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         }
     }
 
-//    @SuppressWarnings("unchecked");
+    //    @SuppressWarnings("unchecked");
     private <T extends Action> T takeFromQueue(T action) {
-        Class<T> c = (Class<T>)action.getClass();
+        Class<T> c = (Class<T>) action.getClass();
         return takeFromQueue(c);
     }
 
@@ -164,36 +161,36 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     }
 
     @Override
-    public HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
+    public HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate, MonitorManager manager) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        return requestHistoricalData(contractDetails.contract(), duration, keepUpToDate);
+        return requestHistoricalData(contractDetails.contract(), duration, keepUpToDate, manager);
     }
 
     @Override
     public HistoricalDataAction waitForHistoricalData() {
-
         return takeFromQueue(HistoricalDataAction.class);
     }
 
     /**
      * requests historical data. returns as soon as historic data is fetched.
+     * this does not stream updates
      * if keepUpToDate = true, then the HDAction will continue to be updated until its time limit is reached
      */
     @Override
-    public HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
+    public HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        var sent = requestHistoricalData(contractDetails.contract(), duration, keepUpToDate);
+        var sent = requestHistoricalData(contractDetails.contract(), duration, false, null);
         return takeFromQueue(sent);
     }
 
     public void saveHistoricalData(String symbol, String contractMonth, Duration duration) {
-        var hdAction = getHistoricalData(symbol, contractMonth, duration, false);
+        var hdAction = getHistoricalData(symbol, contractMonth, duration);
         processHistoricalData(hdAction, true);
     }
 
-    private void getHistoricalIndexData(String symbol, Duration duration, boolean keepUpToDate) {
+    private void getHistoricalIndexData(String symbol, Duration duration) {
         var contract = contractFactory.newIndex(symbol);
-        var sent = requestHistoricalData(contract, duration, keepUpToDate);
+        var sent = requestHistoricalData(contract, duration, false, null);
         processHistoricalIndexData(takeFromQueue(sent));
     }
 
@@ -223,6 +220,23 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         return action;
     }
 
+    @Override
+    public void placeOrders(String symbol, List<OrderDetails> orderDetails) {
+        var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, CONTRACT_MONTH));
+        var builder = new OrderBuilder(nextOrderId, e -> m_client.placeOrder(e.orderId(), contractDetails.contract(), e));
+        builder.placeOrders(OrderBuilder.fromOrderDetails(orderDetails));
+    }
+
+    @Override
+    public void buildOrder(String symbol) {
+        var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, CONTRACT_MONTH));
+        var builder = new OrderBuilder(nextOrderId, e -> m_client.placeOrder(e.orderId(), contractDetails.contract(), e));
+        var parent = new OrderDetails(Types.Action.BUY, 6138.50, 1);
+        var orderGroup = OrderBuilder.fromOrderDetails(parent.createOrderGroup(32, 32));
+
+        builder.placeOrders(orderGroup);
+    }
+
 //    private void processContractDetails(ContractDetailsAction action) {
 //        var cd = action.getContractDetails();
 //        log.info(cd.conid() + " " + cd.contract().description());
@@ -237,8 +251,8 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         });
     }
 
-    private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate) {
-        var action = new HistoricalDataAction(m_client, id, queue, contract, duration, keepUpToDate);
+    private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate, MonitorManager manager) {
+        var action = new HistoricalDataAction(m_client, id, queue, contract, duration, keepUpToDate, manager);
         sendRequest(action);
         return action;
     }
@@ -287,7 +301,8 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     static void sleep(int millis) {
         try {
             Thread.sleep(millis);
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
     }
 
     @Override
@@ -321,5 +336,6 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             String symbol,
             String contractMonth,  // only non‐null for futures
             String exchange        // only non‐null for indexes
-    ) {}
+    ) {
+    }
 }

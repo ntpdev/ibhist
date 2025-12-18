@@ -13,7 +13,7 @@ import java.util.function.DoublePredicate;
 public class RealTimeHistory {
     private static final Logger log = LogManager.getLogger(RealTimeHistory.class.getSimpleName());
 
-    public static final int MAX_SIZE = 1024;
+    public static final int MAX_SIZE = 2048;
     // RealTimeBar(LocalDateTime dt, double open, double high, double low, double close, double volume, double wap) {}
     LocalDateTime[] dt = new LocalDateTime[MAX_SIZE];
     double[] open = new double[MAX_SIZE];
@@ -77,14 +77,6 @@ public class RealTimeHistory {
         return new PriceMonitor(data, listener);
     }
 
-    public enum ChangeState {
-        entry,
-        exit,
-        inside
-    }
-
-    public record PriceEvent(ChangeState state, double price) {
-    }
 
     /**
      * PriceMonitor fires events while pred true provided at least threshold number of events

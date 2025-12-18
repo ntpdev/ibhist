@@ -30,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -103,13 +104,21 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), UTC);
     }
 
+    private static Integer getNumberInserted(Optional<InsertManyResult> r) {
+        return r.map(e -> e.getInsertedIds().size()).orElse(0);
+    }
+
     @Override
     public void insert(PriceHistory history) {
         log.info("inserting into mongodb.futures.m1 " + history);
-        var r = insert(getCollection(), history);
-        log.info("inserted documents " + r.getInsertedIds().size());
+        var imr = insert(getCollection(), history);
+        log.info("inserted documents " + getNumberInserted(imr));
     }
 
+    /**
+     * Append to existing time series collection removing existing rows with different volume
+     * @param history
+     */
     @Override
     public void append(PriceHistory history) {
         try {
@@ -117,8 +126,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             var collection = getCollection();
             LocalDateTime last = removeExistingWithDifferentVol(collection, history);
             log.info("inserting rows after " + last);
-            var r = insert(collection, history, last);
-            log.info("inserted rows " + r.getInsertedIds().size());
+            var imr = insert(collection, history, last);
+            log.info("inserted documents " + getNumberInserted(imr));
         } catch (MongoTimeoutException e) {
             log.error(e);
         }
@@ -191,11 +200,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return history;
     }
 
-    private InsertManyResult insert(MongoCollection<Document> m1, PriceHistory history) {
+    private Optional<InsertManyResult> insert(MongoCollection<Document> m1, PriceHistory history) {
         return insert(m1, history, null);
     }
 
-    private InsertManyResult insert(MongoCollection<Document> m1, PriceHistory history, LocalDateTime lastExisting) {
+    private Optional<InsertManyResult> insert(MongoCollection<Document> m1, PriceHistory history, LocalDateTime lastExisting) {
         LocalDateTime[] dates = history.dates;
         double[] opens = history.getColumn("open");
         double[] highs = history.getColumn("high");
@@ -218,7 +227,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                 rows.add(d);
             }
         }
-        return m1.insertMany(rows);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(m1.insertMany(rows));
     }
 
     // inserts using record
@@ -257,7 +266,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         // id field ie groupBy
                         "$symbol",
                         // aggregates
-                        Accumulators.sum("threshold", 1),
+                        Accumulators.sum("count", 1),
                         Accumulators.max("high", "$high"),
                         Accumulators.min("low", "$low"),
                         Accumulators.first("start", "$timestamp"),
@@ -314,6 +323,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     /**
      * find days with total volume >minVol
+     * aggregate by calendar day
      */
     @Override
     public List<DayVolume> queryDaysWithVolume(String symbol, double minVol) {
@@ -323,7 +333,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         // id - groupBy fields {$dateTrunc: {date: "$timestamp", unit: "day"} }
                         new Document("$dateTrunc", new Document("date", "$timestamp").append("unit", "day")),
                         // aggregration fields in group
-                        Accumulators.sum("threshold", 1),
+                        Accumulators.sum("count", 1),
                         Accumulators.sum("volume", "$volume")),
                 Aggregates.match(Filters.gte("volume", minVol)),
                 Aggregates.sort(Sorts.ascending("_id"))

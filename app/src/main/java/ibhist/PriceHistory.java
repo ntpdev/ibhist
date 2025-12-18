@@ -507,7 +507,17 @@ public class PriceHistory implements Serializable {
     }
 
     public IndexEntry indexEntry(int n) {
-        return index().indexEntries.get(n >= 0 ? n : n + index().entries().size());
+        var ix = index();
+        return ix.indexEntries.get(n >= 0 ? n : n + ix.entries().size());
+    }
+
+    public IndexEntry indexEntry(LocalDate date) {
+        for (var ix : index().entries()) {
+            if (ix.tradeDate.equals(date)) {
+                return ix;
+            }
+        }
+        return null;
     }
 
     List<Bar> dailyBars() {
@@ -653,7 +663,7 @@ public class PriceHistory implements Serializable {
                     ind += " ▼";
                 }
                 double close = closes[i];
-                var day = index().entries().getLast();
+                var day = indexEntry(-1);
                 int idxOpen = max(day.euStart(), day.rthStart());
                 double sessionOpen = opens[idxOpen];
                 sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] [yellow,%d]%4.0f[/] %.2f %.2f %2.0f %s [green,%d]%3d[/] [red,%d]%3d[/] %s%s%s%s").formatted(
