@@ -21,7 +21,7 @@ import static ibhist.StringUtils.print;
  */
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
-    public static final String CONTRACT_MONTH = "202509";
+    public static final String CONTRACT_MONTH = "202512";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;

@@ -19,7 +19,7 @@ import org.bson.codecs.pojo.PojoCodecProvider;
 import org.bson.codecs.pojo.annotations.BsonId;
 import org.bson.conversions.Bson;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -110,9 +110,9 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     @Override
     public void insert(PriceHistory history) {
-        log.info("inserting into mongodb.futures.m1 " + history);
+        log.info("inserting into mongodb.futures.m1 {}", history);
         var imr = insert(getCollection(), history);
-        log.info("inserted documents " + getNumberInserted(imr));
+        log.info("inserted documents {}", getNumberInserted(imr));
     }
 
     /**
@@ -122,12 +122,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     @Override
     public void append(PriceHistory history) {
         try {
-            log.info("inserting into mongodb.futures.m1 " + history);
+            log.info("inserting into mongodb.futures.m1 {}", history);
             var collection = getCollection();
             LocalDateTime last = removeExistingWithDifferentVol(collection, history);
-            log.info("inserting rows after " + last);
+            log.info("inserting rows after {}", last);
             var imr = insert(collection, history, last);
-            log.info("inserted documents " + getNumberInserted(imr));
+            log.info("inserted documents {}", getNumberInserted(imr));
         } catch (MongoTimeoutException e) {
             log.error(e);
         }
@@ -144,7 +144,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             var timestamp = asLocalDateTime(lastDoc, "timestamp");
             var bar = history.bar(timestamp);
             if (bar.isPresent() && !DoubleMath.fuzzyEquals(lastDoc.getDouble("volume"), bar.get().volume(), 1e-6)) {
-                log.info("deleting time series timestamp=" + timestamp);
+                log.info("deleting time series timestamp={}", timestamp);
                 collection.deleteOne(Filters.and(Filters.eq("symbol", lastDoc.getString("symbol")), Filters.eq("timestamp", lastDoc.getDate("timestamp"))));
             } else {
                 dt = timestamp;
@@ -183,7 +183,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     @Override
     public ArrayList<PriceBarM> loadBetween(String symbol, Instant iStart, Instant iEndExclusive) {
-        log.info("loadBetween " + symbol + " [" + iStart + ", " + iEndExclusive + ")");
+        log.info("loadBetween {} [{}, {})", symbol, iStart, iEndExclusive);
         var fSymbol = Filters.eq("symbol", symbol);
         var fStart = Filters.gte("timestamp", Date.from(iStart));
         var fEnd = Filters.lt("timestamp", Date.from(iEndExclusive));
@@ -244,7 +244,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             var d = new PriceBarM(null, history.getSymbolLowerCase(), dates[i], opens[i], highs[i], lows[i], closes[i], volumes[i], BigDecimal.valueOf(vwaps[i]).setScale(3, RoundingMode.HALF_UP).doubleValue());
             rows.add(d);
         }
-        log.info("inserting threshold " + rows.size());
+        log.info("inserting threshold {}", rows.size());
         return m1.insertMany(rows);
     }
 

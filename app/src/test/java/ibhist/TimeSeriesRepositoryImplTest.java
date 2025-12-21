@@ -6,12 +6,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,7 +37,7 @@ class TimeSeriesRepositoryImplTest {
 
     @Test
     void test_newCollectionLoadAll() {
-        var xs = List.of("esu5", "nqu5", "esm5", "nqm5", "esh5", "nqh5", "esm4", "nqm4", "esu4", "nqu4", "esz4", "nqz4");
+        var xs = List.of("esh6", "nqh6","esz5", "nqz5","esu5", "nqu5", "esm5", "nqm5", "esh5", "nqh5", "esm4", "nqm4", "esu4", "nqu4", "esz4", "nqz4");
         repository.newTimeSeriesCollection();
         var phr = new PriceHistoryRepository();
         xs.stream().map(phr::load).filter(Optional::isPresent).map(Optional::get).forEach(

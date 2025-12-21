@@ -4,7 +4,8 @@ import com.google.common.math.DoubleMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -447,7 +448,7 @@ public class PriceHistory implements Serializable {
                 columns.get(5).values[i]);
     }
 
-    public Optional<Bar> bar(LocalDateTime d) {
+    public Optional<Bar> bar(@NotNull LocalDateTime d) {
         int idx = find(d);
         return idx < 0 ? Optional.empty() : Optional.of(bar(idx));
     }

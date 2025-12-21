@@ -20,7 +20,7 @@ public class App {
      *
      * @param args command line arguments
      */
-    public static void main(String[] args) {
+    static void main(String[] args) {
         log.info("Java version: {}", System.getProperty("java.version"));
 
         var injector = Guice.createInjector(new AppModule());
@@ -46,7 +46,7 @@ public class App {
                 injector.getInstance(Repl.class).run();
             }
             default -> {
-                log.error("Unknown command: '{}'. Valid options: hist, day, rt, repl", command);
+                log.error("Unknown command: '{}'.", command);
                 System.err.println("Usage: java ibhist.App [hist|day|rt|repl]");
                 System.exit(1);
             }

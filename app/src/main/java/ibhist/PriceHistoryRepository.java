@@ -53,7 +53,7 @@ public class PriceHistoryRepository {
         try {
             Path cacheFile = root.resolve(symbol + ".bin");
             var priceHistory = useCache && existsRecent(cacheFile, 60) ? loadFromCache(cacheFile) : loadAndCache(symbol, cacheFile);
-            log.info("file loaded " + priceHistory);
+            log.info("file loaded {}", priceHistory);
             return priceHistory;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -87,7 +87,7 @@ public class PriceHistoryRepository {
                         throw new RuntimeException("Current bar " + line.date() + " is before last bar " + lastBar);
                     }
                     if (diff > 1) {
-                        log.info(String.format("Gap between %s and %s of %d minutes", lastBar, line.date(), diff));
+                        log.info("Gap between {} and {} of {} minutes", lastBar, line.date(), diff);
                     }
                 }
                 priceHistory.insert(i++, line.date(), line.open().doubleValue(), line.high().doubleValue(), line.low().doubleValue(), line.close().doubleValue(), line.volume());
@@ -113,7 +113,7 @@ public class PriceHistoryRepository {
     }
 
     Optional<PriceHistory> loadFromCache(Path cacheFile) {
-        log.info("Loading from cache file " + cacheFile);
+        log.info("Loading from cache file {}", cacheFile);
         try (ObjectInputStream objectOutput = new ObjectInputStream(
                 new GZIPInputStream(new FileInputStream(cacheFile.toFile())));) {
             return Optional.of((PriceHistory) objectOutput.readObject());
@@ -123,7 +123,7 @@ public class PriceHistoryRepository {
     }
 
     void saveToCache(Path cacheFile, PriceHistory priceHistory) {
-        log.info("Saving to cache file " + cacheFile);
+        log.info("Saving to cache file {}", cacheFile);
         try (ObjectOutputStream objectOutput = new ObjectOutputStream(
                 new GZIPOutputStream(new FileOutputStream(cacheFile.toFile())))) {
             objectOutput.writeObject(priceHistory);
@@ -156,7 +156,7 @@ public class PriceHistoryRepository {
             LocalDateTime hw = xs.isEmpty()
                     ? LocalDateTime.of(2020, 1, 1, 0, 0)
                     : xs.getLast().date();
-            log.info("loadCsv " + file);
+            log.info("loadCsv {}", file);
             // skip header line which does not have an index
             xs.addAll(Files.lines(file)
                     .filter(e -> Character.isDigit(e.charAt(0)))

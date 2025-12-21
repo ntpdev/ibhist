@@ -3,7 +3,7 @@ package ibhist;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

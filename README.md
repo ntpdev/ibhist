@@ -1,5 +1,5 @@
 **instructions**
-- JDK 21
+- JDK 25
 - https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/
 - https://interactivebrokers.github.io/
 

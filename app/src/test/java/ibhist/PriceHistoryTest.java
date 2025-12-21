@@ -9,7 +9,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static ibhist.StringUtils.print;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PriceHistoryTest {
