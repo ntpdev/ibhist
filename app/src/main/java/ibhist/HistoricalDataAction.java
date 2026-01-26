@@ -5,6 +5,7 @@ import com.ib.client.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -23,6 +24,7 @@ import static ibhist.StringUtils.WS_SPLITTER;
 public class HistoricalDataAction extends ActionBase {
     //    private static final SimpleDateFormat FORMAT = new SimpleDateFormat("yyyyMMdd-HH:mm:ss");
     private final Contract contract;
+    private final LocalDate endDate;
     private final Duration duration;
     private final boolean keepUpToDate;
     private final LocalDateTime updateUntil;
@@ -33,9 +35,10 @@ public class HistoricalDataAction extends ActionBase {
     private int currentBarCount = 99;
     private boolean init = false;
 
-    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, Duration duration, boolean keepUpToDate, MonitorManager monitorManager) {
+    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, LocalDate endDate, Duration duration, boolean keepUpToDate, MonitorManager monitorManager) {
         super(client, idGenerator, queue);
         this.contract = contract;
+        this.endDate = endDate;
         this.duration = duration;
         this.keepUpToDate = keepUpToDate;
         this.updateUntil = keepUpToDate ? LocalDateTime.now().plusMinutes(15) : null;
@@ -52,12 +55,17 @@ public class HistoricalDataAction extends ActionBase {
 
     @Override
     public void makeRequest() {
+        String upTo = "";
+        if (endDate != null) {
+            var d = endDate.atTime(22, 59);
+            upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss"));
+        }
 //        var d = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusMinutes(1);
 //        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss")); 20231001 22:00:00
         log.info("reqHistoricalData reqId = {} symbol = {} duration = {}", requestId, contract.localSymbol(), duration.getCode());
         // add end explicit end date to get up to that point
 //        client.reqHistoricalData(requestId, contract, "20250718 23:00:00 Europe/London", duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
-        client.reqHistoricalData(requestId, contract, "", duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
+        client.reqHistoricalData(requestId, contract, upTo, duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
     }
 
     @Override
@@ -194,6 +202,7 @@ public class HistoricalDataAction extends ActionBase {
         try {
             String fname = "z%s %s.csv".formatted(getSymbol(), startDate.format(DateTimeFormatter.BASIC_ISO_DATE));
             var p = Path.of("c:\\temp\\ultra\\", fname);
+            p = Path.of(System.getProperty("user.home"), "Documents", "data", fname);
             log.info("saving file " + p);
             Files.writeString(p, barsAsCsv());
             return p;

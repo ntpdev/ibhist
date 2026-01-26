@@ -12,6 +12,7 @@ public class ContractFactoryImpl implements ContractFactory {
         contract.secType("FUT");
         contract.currency("USD");
         contract.exchange("CME");
+        contract.includeExpired(true);
         //! [futcontract]
         return contract;
     }

@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -21,7 +22,7 @@ import static ibhist.StringUtils.print;
  */
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
-    public static final String CONTRACT_MONTH = "202512";
+    public static final String CONTRACT_MONTH = "202603";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -47,7 +48,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         if (connect()) {
             try {
                 switch (action) {
-                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_10);
+                    //TODO add proper entry point
+//                    case ES_DAY -> saveRangeHistoricalData("ES", CONTRACT_MONTH, LocalDate.of(2025,3,22), 8);  //saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_10);
+                    case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
                     case HISTORICAL -> saveMultipleHistoricalData(Duration.DAY_10);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // never called
                 }
@@ -173,14 +176,22 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     /**
      * requests historical data. returns as soon as historic data is fetched.
-     * this does not stream updates
-     * if keepUpToDate = true, then the HDAction will continue to be updated until its time limit is reached
+     * this does not stream updates unless
+     * keepUpToDate = true, then the HDAction will continue to be updated until its time limit is reached
      */
     @Override
     public HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
         var sent = requestHistoricalData(contractDetails.contract(), duration, false, null);
         return takeFromQueue(sent);
+    }
+
+    /**
+     * save multiple periods of historical data upto the given endDate
+     */
+    public void saveHistoricalDataRange(String symbol, String contractMonth, LocalDate endDate, int periods) {
+        var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
+        requestMultipleHistoricalData(contractDetails.contract(), endDate, periods);
     }
 
     public void saveHistoricalData(String symbol, String contractMonth, Duration duration) {
@@ -237,22 +248,34 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         builder.placeOrders(orderGroup);
     }
 
-//    private void processContractDetails(ContractDetailsAction action) {
-//        var cd = action.getContractDetails();
-//        log.info(cd.conid() + " " + cd.contract().description());
-//    }
 
+    /**
+     * blocking call to get IB contract details. Details are cached.
+     */
     public ContractDetails getContractDetails(Contract contract) {
         var key = new ContractKey(contract.symbol(), contract.lastTradeDateOrContractMonth(), contract.exchange());
         return contractCache.computeIfAbsent(key, k -> {
             requestContractDetails(contract);
-            var action = takeFromQueue(ContractDetailsAction.class);
-            return action.getContractDetails();
+            return takeFromQueue(ContractDetailsAction.class).getContractDetails();
         });
     }
 
+    /**
+     * Returns a list of n dates in chronological order, ending with endDate and periodLength days apart.
+     */
+    private List<LocalDate> calculatePeriodEndDates(LocalDate endDate, int n, int periodLength) {
+        List<LocalDate> dates = new ArrayList<>(n);
+        LocalDate firstEnd = endDate.minusDays((long) (n - 1) * periodLength);
+
+        for (LocalDate d = firstEnd; !d.isAfter(endDate); d = d.plusDays(periodLength)) {
+            dates.add(d);
+        }
+        return dates;
+    }
+
     private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate, MonitorManager manager) {
-        var action = new HistoricalDataAction(m_client, id, queue, contract, duration, keepUpToDate, manager);
+        var action = new HistoricalDataAction(m_client, id, queue, contract, null, duration, keepUpToDate, manager);
+//        var action = new HistoricalDataAction(m_client, id, queue, contract, LocalDate.of(2025, 11, 9), duration, keepUpToDate, manager);
         sendRequest(action);
         return action;
     }
@@ -281,7 +304,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 var index = history.index();
                 path = action.save(index.entries().getFirst().tradeDate());
                 // update repository
-                timeSeriesRepository.get().append(history);
+//                timeSeriesRepository.get().append(history);
             }
         }
         return path;
@@ -295,6 +318,22 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             log.info(contract.symbol() + " bars from " + bars.getFirst().time() + " to " + bars.getLast().time());
             var history = action.asPriceHistory();
             action.save(history.getDates()[0].toLocalDate());
+        }
+    }
+
+    private void requestMultipleHistoricalData(Contract contract, LocalDate endDate, int periods) {
+        List<LocalDate> periodEndDates = calculatePeriodEndDates(endDate, periods, 14);
+
+        log.info("Fetching {} periods ending at dates: {}", periods, periodEndDates);
+
+        for (LocalDate periodEnd : periodEndDates) {
+            log.info("Requesting timeseries ending date {}", periodEnd);
+            var action = new HistoricalDataAction(
+                    m_client, id, queue, contract, periodEnd,
+                    Duration.DAY_10, false, null
+            );
+            sendRequest(action);
+            processHistoricalData(takeFromQueue(action), true);
         }
     }
 

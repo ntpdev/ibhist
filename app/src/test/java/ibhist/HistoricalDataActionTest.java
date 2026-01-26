@@ -55,7 +55,7 @@ class HistoricalDataActionTest {
     void test_onHistoricalData_captures_bars_and_formats() throws InterruptedException {
         BlockingQueue<Action> mockQueue = mock(BlockingQueue.class);
 
-        var action = new HistoricalDataAction(null, new AtomicInteger(), mockQueue, new Contract(), Duration.DAY_1, false, new MonitorManager());
+        var action = new HistoricalDataAction(null, new AtomicInteger(), mockQueue, new Contract(), null, Duration.DAY_1, false, new MonitorManager());
         action.onHistoricalData(newBar(4983d, 0));
         action.onHistoricalData(newBar(4984d, 1));
 
@@ -79,7 +79,7 @@ class HistoricalDataActionTest {
         BlockingQueue<Action> queue = new ArrayBlockingQueue<>(16);
         var contract = new Contract();
         contract.symbol("ES");
-        var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, Duration.DAY_1, false, new MonitorManager());
+        var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, null, Duration.DAY_1, false, new MonitorManager());
         var repo = new PriceHistoryRepository();
         var history = repo.load("esu").get();
         var idx = history.indexEntry(LocalDate.of(2025, 6, 18));
@@ -112,7 +112,7 @@ class HistoricalDataActionTest {
         monitorManager.processCommand("add monitor > 6042.50 3");
         var contract = new Contract();
         contract.symbol("ES");
-        var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, Duration.DAY_1, true, monitorManager);
+        var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, null, Duration.DAY_1, true, monitorManager);
         var repo = new PriceHistoryRepository();
         var history = repo.load("esu5").get();
         var idx = history.indexEntry(LocalDate.of(2025, 6, 18));
