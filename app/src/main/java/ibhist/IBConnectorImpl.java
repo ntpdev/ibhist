@@ -304,7 +304,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 var index = history.index();
                 path = action.save(index.entries().getFirst().tradeDate());
                 // update repository
-//                timeSeriesRepository.get().append(history);
+                timeSeriesRepository.get().append(history);
             }
         }
         return path;
