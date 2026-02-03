@@ -105,7 +105,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 log.error(e);
             }
         }
-        m_client.eDisconnect();
+        if (m_client != null && m_client.isConnected()) {
+            m_client.eDisconnect();
+        }
         sleep(1_000);
     }
 

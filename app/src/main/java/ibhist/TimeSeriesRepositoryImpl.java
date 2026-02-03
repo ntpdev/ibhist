@@ -4,6 +4,7 @@ import com.google.common.base.Suppliers;
 import com.google.common.math.DoubleMath;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -41,8 +42,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     public static final String DAILY_COLLECTION = "daily";
     public static final String DAILY_RTH_COLLECTION = "dailyRth";
     private static final Logger log = LogManager.getLogger(TimeSeriesRepositoryImpl.class.getSimpleName());
-    public static final ZoneId UTC = ZoneId.of("UTC");
-
+    static final ZoneOffset UTC = ZoneOffset.UTC;
     private final Supplier<MongoClient> client;
     private final Supplier<MongoDatabase> db;
 
@@ -71,7 +71,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             try {
                 getCollection(name).drop();
                 return true;
-            } catch (IllegalArgumentException e) {
+            } catch (MongoException e) {
                 log.error(e);
             }
         }
@@ -169,24 +169,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return dt;
     }
 
-    @Override
-    @Nullable
-    public LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol) {
-        var item = collection
-                .find(Filters.eq("symbol", symbol))
-                .sort(Sorts.descending("timestamp"))
-                .projection(Projections.include("timestamp"))
-                .first();
-        return asLocalDateTime(item, "timestamp");
-    }
-
 
     @Override
     public PriceHistory loadPriceHistory(String symbol, LocalDate startDate, LocalDate endDate, boolean rthOnly) {
-        //TODO test this
-        var tradeDates = queryTradeDates(symbol.toLowerCase(), 0);
+        var tradeDates = queryTradeDates(symbol, 0);
         if (tradeDates.isEmpty()) {
-            return null;
+            throw new RuntimeException("No data found for symbol = '" + symbol + "'");
         }
 
         var startEntry = tradeDates.stream()
@@ -204,7 +192,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
         var startTm = rthOnly ? startEntry.rthStart() : startEntry.start();
         var endTm = rthOnly ? endEntry.rthEnd() : endEntry.end();
-        return makePriceHistory(loadBetween(symbol, startTm, endTm));
+        return makePriceHistory(queryM1RowsBetween(symbol, startTm, endTm));
     }
 
     /*
@@ -219,7 +207,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
      * load raw time series data between [start, end] inclusive
      */
     @Override
-    public List<PriceBarM> loadBetween(String symbol, LocalDateTime start, LocalDateTime end) {
+    public List<PriceBarM> queryM1RowsBetween(String symbol, LocalDateTime start, LocalDateTime end) {
         log.info("loadBetween {} [{}, {}]", symbol, start, end);
         var fSymbol = Filters.eq("symbol", symbol);
         var fStart = Filters.gte("timestamp", Date.from(start.atZone(UTC).toInstant()));
@@ -267,23 +255,23 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(m1.insertMany(rows));
     }
 
-    // inserts using record
-    private InsertManyResult insertEx(MongoCollection<PriceBarM> m1, PriceHistory history) {
-        LocalDateTime[] dates = history.dates;
-        double[] opens = history.getColumn("open");
-        double[] highs = history.getColumn("high");
-        double[] lows = history.getColumn("low");
-        double[] closes = history.getColumn("close");
-        double[] volumes = history.getColumn("volume");
-        double[] vwaps = history.getColumn("vwap");
-        List<PriceBarM> rows = new ArrayList<>(dates.length);
-        for (int i = 0; i < dates.length; i++) {
-            var d = new PriceBarM(null, history.getSymbolLowerCase(), dates[i], opens[i], highs[i], lows[i], closes[i], volumes[i], BigDecimal.valueOf(vwaps[i]).setScale(3, RoundingMode.HALF_UP).doubleValue());
-            rows.add(d);
-        }
-        log.info("inserting threshold {}", rows.size());
-        return m1.insertMany(rows);
-    }
+//    // inserts using record
+//    private InsertManyResult insertEx(MongoCollection<PriceBarM> m1, PriceHistory history) {
+//        LocalDateTime[] dates = history.dates;
+//        double[] opens = history.getColumn("open");
+//        double[] highs = history.getColumn("high");
+//        double[] lows = history.getColumn("low");
+//        double[] closes = history.getColumn("close");
+//        double[] volumes = history.getColumn("volume");
+//        double[] vwaps = history.getColumn("vwap");
+//        List<PriceBarM> rows = new ArrayList<>(dates.length);
+//        for (int i = 0; i < dates.length; i++) {
+//            var d = new PriceBarM(null, history.getSymbolLowerCase(), dates[i], opens[i], highs[i], lows[i], closes[i], volumes[i], BigDecimal.valueOf(vwaps[i]).setScale(3, RoundingMode.HALF_UP).doubleValue());
+//            rows.add(d);
+//        }
+//        log.info("inserting threshold {}", rows.size());
+//        return m1.insertMany(rows);
+//    }
 
     /* equivalent aggregation pipeline
         $group: {
@@ -339,7 +327,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     @Override
     public List<Summary> buildTradeDateIndex(String symbol) {
         var result = getCollection(TRADE_DATE_INDEX_COLLECTION).deleteMany(Filters.eq("symbol", symbol));
-        log.info("deleted {} rows for symbol {}", result.getDeletedCount(), symbol);
+        log.info("deleted {} rows for symbol {} from trade_date_index", result.getDeletedCount(), symbol);
         var entries = queryContiguousRegions(symbol, 30);
         insertTradeDateIndexRows(Map.of(symbol, entries));
         return queryM1Summary().stream()
@@ -408,7 +396,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     private static Date toDate(LocalDateTime ldt) {
         return ldt == null || ldt.equals(LocalDateTime.MIN)
                 ? null
-                : Date.from(ldt.toInstant(ZoneOffset.UTC));
+                : Date.from(ldt.toInstant(UTC));
+    }
+
+    private static Instant toInstant(LocalDateTime ldt) {
+        return ldt.toInstant(UTC);
     }
 
     void insertTradeDateIndexRows(Map<String, List<TradeDateIndexEntry>> data) {
@@ -440,7 +432,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             }
 
             var r = collection.insertMany(docs, options);
-            log.info("day index for symbol {} inserted {} ", symbol, r.getInsertedIds().size());
+            log.info("trade_date_index for symbol {} inserted {} ", symbol, r.getInsertedIds().size());
         }
     }
 
@@ -541,7 +533,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     // Add this record for daily bars (inside the class, near other records)
     public record DailyBarMDB(
             String symbol,
-            Date tradeDate,
+            Date date,
             double open,
             double high,
             double low,
@@ -588,8 +580,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     @Nullable
     private DailyBar aggregateSingleDay(String symbol, LocalDate tradeDate,
                                         LocalDateTime start, LocalDateTime end) {
-        Instant iStart = start.atZone(UTC).toInstant();
-        Instant iEnd = end.plusMinutes(1).atZone(UTC).toInstant(); // inclusive end
+        Instant iStart = toInstant(start);
+        Instant iEnd = toInstant(end.plusMinutes(1)); // inclusive end
 
         var pipeline = List.of(
                 Aggregates.match(Filters.and(
@@ -680,20 +672,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     /**
-     * Query daily bars for a symbol.
+     * Maps a list of DailyBarMDB records to DailyBar objects.
      */
-    public List<DailyBar> queryDailyBars(String symbol, boolean rth) {
-        String collectionName = rth ? DAILY_RTH_COLLECTION : DAILY_COLLECTION;
-        var collection = getCollection(collectionName, DailyBarMDB.class);
-
-        var results = collection
-                .find(Filters.eq("symbol", symbol.toLowerCase()))
-                .sort(Sorts.ascending("date"))
-                .into(new ArrayList<>());
-
+    private List<DailyBar> mapToDailyBars(List<DailyBarMDB> results) {
         return results.stream()
                 .map(d -> new DailyBar(
-                        asLocalDateTime(d.tradeDate()).toLocalDate(),
+                        asLocalDateTime(d.date()).toLocalDate(),
                         d.open(),
                         d.high(),
                         d.low(),
@@ -705,7 +689,22 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     /**
-     * Query daily bars between dates (inclusive).
+     * Query all daily bars for a symbol.
+     */
+    public List<DailyBar> queryDailyBars(String symbol, boolean rth) {
+        String collectionName = rth ? DAILY_RTH_COLLECTION : DAILY_COLLECTION;
+        var collection = getCollection(collectionName, DailyBarMDB.class);
+
+        var results = collection
+                .find(Filters.eq("symbol", symbol.toLowerCase()))
+                .sort(Sorts.ascending("date"))
+                .into(new ArrayList<>());
+
+        return mapToDailyBars(results);
+    }
+
+    /**
+     * Query daily bars for a symbol between dates (inclusive).
      */
     public List<DailyBar> queryDailyBars(String symbol, LocalDate startDt,
                                          LocalDate endDt, boolean rth) {
@@ -723,17 +722,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                 .sort(Sorts.ascending("date"))
                 .into(new ArrayList<>());
 
-        return results.stream()
-                .map(d -> new DailyBar(
-                        asLocalDateTime(d.tradeDate()).toLocalDate(),
-                        d.open(),
-                        d.high(),
-                        d.low(),
-                        d.close(),
-                        d.volume(),
-                        d.vwap()
-                ))
-                .toList();
+        return mapToDailyBars(results);
     }
 
 }

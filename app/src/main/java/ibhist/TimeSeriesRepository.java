@@ -1,14 +1,7 @@
 package ibhist;
 
-import com.mongodb.client.MongoCollection;
-import org.bson.Document;
-
-import org.jetbrains.annotations.Nullable;
-
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 public interface TimeSeriesRepository {
@@ -23,11 +16,9 @@ public interface TimeSeriesRepository {
 
     int append(PriceHistory history);
 
-    @Nullable LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol);
-
     PriceHistory loadPriceHistory(String symbol, LocalDate startDate, LocalDate endDate, boolean rthOnly);
 
-    List<PriceBarM> loadBetween(String symbol, LocalDateTime start, LocalDateTime end);
+    List<PriceBarM> queryM1RowsBetween(String symbol, LocalDateTime start, LocalDateTime end);
 
     List<Summary> queryM1Summary();
 

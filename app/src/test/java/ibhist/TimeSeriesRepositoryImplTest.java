@@ -40,7 +40,7 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_buildIndex() {
         var summary = repository.buildTradeDateIndex();
-        log.info("rebuild index for {} symbols", summary.size());
+        log.info("rebuild trade_date_index for {} symbols", summary.size());
     }
 
     @Test

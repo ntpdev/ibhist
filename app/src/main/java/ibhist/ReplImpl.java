@@ -27,8 +27,8 @@ public class ReplImpl implements Repl {
     private static final DateTimeFormatter tradeDateformatter = DateTimeFormatter.ofPattern("EEE d MMMM");
     private final IBConnector connector;
     private final TimeSeriesRepository tsRepository;
-    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
-//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
+//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
+    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
     private PriceHistory history = null;
 
 
@@ -42,9 +42,9 @@ public class ReplImpl implements Repl {
         try {
             runImpl();
         } catch (Exception e) {
-            log.error("ReplIml unhandled exception", e);
+            log.error("Unhandled exception", e);
         }
-        print("[blue]bye[/]");
+        print("[red]bye[/]");
     }
 
     void runImpl() throws IOException {
