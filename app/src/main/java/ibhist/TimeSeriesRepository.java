@@ -4,6 +4,7 @@ import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 
 import org.jetbrains.annotations.Nullable;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -11,42 +12,37 @@ import java.util.ArrayList;
 import java.util.List;
 
 public interface TimeSeriesRepository {
-    long RTH_START_MINUTES = 930;
-    long RTH_END_MINUTES = 1319;
+    long RTH_START_OFFSET = 930;
+    long RTH_END_OFFSET = 1319;
 
-    void newTimeSeriesCollection();
+    void createM1TimeSeriesCollection(String collectionName, boolean dropExisting);
 
-    void createM1TimeSeriesCollection(String metaName, String timestampName);
-
-    void newTradeDateIndexCollection(String name);
-
-    void createTradeDateIndexCollection(String name);
+    void createDailyTimeSeriesCollection(String name, boolean dropExisting);
 
     void insert(PriceHistory history);
 
-    void append(PriceHistory history);
+    int append(PriceHistory history);
 
-    @Nullable
-    LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol);
+    @Nullable LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol);
 
-    PriceHistory loadSingleDay(String symbol, LocalDateTime start);
+    PriceHistory loadPriceHistory(String symbol, LocalDate startDate, LocalDate endDate, boolean rthOnly);
 
-    PriceHistory loadSingleDay(String symbol, LocalDate tradeDate);
+    List<PriceBarM> loadBetween(String symbol, LocalDateTime start, LocalDateTime end);
 
-
-    ArrayList<PriceBarM> loadBetween(String symbol, Instant iStart, Instant iEndExclusive);
-
-    /* equivalent aggregation pipeline
-            $group: {
-              _id: "$symbol",
-              threshold: { $sum : 1 },
-              start: { $first : "$timestamp" },
-              end: { $last : "$timestamp" }
-            }
-         */
     List<Summary> queryM1Summary();
 
+    /**
+     * rebuild the date collection based on m1 data
+     * @return all summary info
+     */
     List<Summary> buildTradeDateIndex();
+
+    /**
+     * rebuild the date documents for just the symbol based on m1 data
+     * @param symbol symbol
+     * @return a list containing the single summary rebuilt
+     */
+    List<Summary> buildTradeDateIndex(String symbol);
 
     List<TradeDateIndexEntry> queryContiguousRegions(String symbol, int gapMins);
 
@@ -55,14 +51,18 @@ public interface TimeSeriesRepository {
     List<TimeSeriesRepositoryImpl.DayVolume> queryDaysWithVolume(String symbol, double minVol);
 
     void buildAllDailyTimeSeries();
+
     void buildDailyTimeSeries(String symbol);
+
     List<DailyBar> queryDailyBars(String symbol, boolean rth);
+
     List<DailyBar> queryDailyBars(String symbol, LocalDate startInclusive, LocalDate endExclusive, boolean rth);
 
-    record Summary(String symbol, int count, double high, double low, LocalDateTime start, LocalDateTime end) {}
+    record Summary(String symbol, int count, double high, double low, LocalDateTime start, LocalDateTime end) {
+    }
 
     record TradeDateIndexEntry(
-            LocalDate tradeDate,
+            LocalDate date,
             LocalDateTime start,
             LocalDateTime end,
             long volume,
@@ -98,25 +98,26 @@ public interface TimeSeriesRepository {
             rthStart = LocalDateTime.MIN;
             rthEnd = LocalDateTime.MIN;
 
-            if (duration > RTH_START_MINUTES) {
-                LocalDateTime computedRthStart = start.plusMinutes(RTH_START_MINUTES);
-                LocalDateTime computedRthEnd = start.plusMinutes(RTH_END_MINUTES);
+            if (duration > RTH_START_OFFSET) {
+                LocalDateTime computedRthStart = start.plusMinutes(RTH_START_OFFSET);
+                LocalDateTime computedRthEnd = start.plusMinutes(RTH_END_OFFSET);
 
                 rthStart = computedRthStart.isAfter(end) ? end : computedRthStart;
                 rthEnd = computedRthEnd.isAfter(end) ? end : computedRthEnd;
             }
 
-            tradeDate = end.toLocalDate();
+            date = end.toLocalDate();
         }
     }
 
     record DailyBar(
-            LocalDate tradeDate,
+            LocalDate date,
             double open,
             double high,
             double low,
             double close,
             int volume,
             double vwap
-    ) {}
+    ) {
+    }
 }

@@ -37,19 +37,16 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     public static final String CONNECTION_STRING = "mongodb://localhost:27017";
     public static final String DATABASE_NAME = "futures";
     public static final String M1_COLLECTION = "m1";
-    public static final String TRADE_DATE_COLLECTION = "tradeDate";
+    public static final String TRADE_DATE_INDEX_COLLECTION = "trade_date_index";
     public static final String DAILY_COLLECTION = "daily";
     public static final String DAILY_RTH_COLLECTION = "dailyRth";
     private static final Logger log = LogManager.getLogger(TimeSeriesRepositoryImpl.class.getSimpleName());
     public static final ZoneId UTC = ZoneId.of("UTC");
-    //    private final String connectionString;
-//    private final String collectionName;
+
     private final Supplier<MongoClient> client;
     private final Supplier<MongoDatabase> db;
 
     public TimeSeriesRepositoryImpl() {
-//        this.connectionString = Objects.requireNonNull(connectionString);
-//        this.collectionName = Objects.requireNonNull(collectionName);
         client = Suppliers.memoize(this::createClient);
         db = Suppliers.memoize(() -> client.get().getDatabase(DATABASE_NAME));
     }
@@ -69,58 +66,44 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return db.get().getCollection(name, clz);
     }
 
-    /**
-     * drop existing collection if it exists and create a new time series collection
-     */
-    @Override
-    public void newTimeSeriesCollection() {
-        try {
-            var c = getCollection(M1_COLLECTION);
-            c.drop();
-        } catch (IllegalArgumentException e) {
-            log.error(e);
+    private boolean dropCollectionIfRequested(String name, boolean dropExisting) {
+        if (dropExisting) {
+            try {
+                getCollection(name).drop();
+                return true;
+            } catch (IllegalArgumentException e) {
+                log.error(e);
+            }
         }
-        createM1TimeSeriesCollection("symbol", "timestamp");
+        return false;
     }
 
     @Override
-    public void createM1TimeSeriesCollection(String metaName, String timestampName) {
-        var options = new TimeSeriesOptions(timestampName)
+    public void createM1TimeSeriesCollection(String name, boolean dropExisting) {
+        dropCollectionIfRequested(name, dropExisting);
+        var options = new TimeSeriesOptions("timestamp")
                 .granularity(TimeSeriesGranularity.MINUTES)
-                .metaField(metaName);
-        db.get().createCollection(M1_COLLECTION, new CreateCollectionOptions().timeSeriesOptions(options));
+                .metaField("symbol");
+        db.get().createCollection(name, new CreateCollectionOptions().timeSeriesOptions(options));
     }
 
     @Override
-    public void createTradeDateIndexCollection(String name) {
-        TimeSeriesOptions tsOptions = new TimeSeriesOptions("tradeDate")
-                        .metaField("symbol")
-                        .granularity(TimeSeriesGranularity.HOURS);
+    public void createDailyTimeSeriesCollection(String name, boolean dropExisting) {
+        dropCollectionIfRequested(name, dropExisting);
+        TimeSeriesOptions tsOptions = new TimeSeriesOptions("date")
+                .metaField("symbol")
+                .granularity(TimeSeriesGranularity.HOURS);
 
         db.get().createCollection(
                 name,
-                new CreateCollectionOptions().timeSeriesOptions(tsOptions)
-        );
+                new CreateCollectionOptions().timeSeriesOptions(tsOptions));
 
-        // Enforce uniqueness of (symbol, tradeDate)
         db.get().getCollection(name).createIndex(
                 Indexes.compoundIndex(
                         Indexes.ascending("symbol"),
-                        Indexes.ascending("tradeDate")
+                        Indexes.ascending("date")
                 ),
-                new IndexOptions()
-        );
-    }
-
-    @Override
-    public void newTradeDateIndexCollection(String name) {
-        try {
-            var c = getCollection(name);
-            c.drop();
-        } catch (IllegalArgumentException e) {
-            log.error(e);
-        }
-        createTradeDateIndexCollection(name);
+                new IndexOptions());
     }
 
     /**
@@ -135,7 +118,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return LocalDateTime.ofInstant(dt.toInstant().truncatedTo(ChronoUnit.SECONDS), UTC);
     }
 
-    private static Integer getNumberInserted(Optional<InsertManyResult> r) {
+    private static int getNumberInserted(Optional<InsertManyResult> r) {
         return r.map(e -> e.getInsertedIds().size()).orElse(0);
     }
 
@@ -151,7 +134,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
      * @param history
      */
     @Override
-    public void append(PriceHistory history) {
+    public int append(PriceHistory history) {
         try {
             log.info("inserting into mongodb.futures.m1 {}", history);
             var collection = getCollection(M1_COLLECTION);
@@ -159,9 +142,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             log.info("inserting rows after {}", last);
             var imr = insert(collection, history, last);
             log.info("inserted documents {}", getNumberInserted(imr));
+            return getNumberInserted(imr);
         } catch (MongoTimeoutException e) {
             log.error(e);
         }
+        return 0;
     }
 
     // last bar in time series may be incomplete
@@ -187,14 +172,39 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     @Override
     @Nullable
     public LocalDateTime findLastDate(MongoCollection<Document> collection, String symbol) {
-        var item = collection.find(Filters.eq("symbol", symbol)).sort(Sorts.descending("timestamp")).projection(Projections.include("timestamp")).first();
+        var item = collection
+                .find(Filters.eq("symbol", symbol))
+                .sort(Sorts.descending("timestamp"))
+                .projection(Projections.include("timestamp"))
+                .first();
         return asLocalDateTime(item, "timestamp");
     }
 
 
     @Override
-    public PriceHistory loadSingleDay(String symbol, LocalDateTime start) {
-        return makePriceHistory(loadBetween(symbol, start.atZone(UTC).toInstant(), start.plusDays(1).atZone(UTC).toInstant()));
+    public PriceHistory loadPriceHistory(String symbol, LocalDate startDate, LocalDate endDate, boolean rthOnly) {
+        //TODO test this
+        var tradeDates = queryTradeDates(symbol.toLowerCase(), 0);
+        if (tradeDates.isEmpty()) {
+            return null;
+        }
+
+        var startEntry = tradeDates.stream()
+                .filter(td -> td.date().equals(startDate))
+                .findFirst()
+                .orElse(null);
+        if (startEntry == null) {
+            return null;
+        }
+
+        var endEntry = tradeDates.stream()
+                .filter(td -> td.date().equals(endDate))
+                .findFirst()
+                .orElse(tradeDates.getLast());
+
+        var startTm = rthOnly ? startEntry.rthStart() : startEntry.start();
+        var endTm = rthOnly ? endEntry.rthEnd() : endEntry.end();
+        return makePriceHistory(loadBetween(symbol, startTm, endTm));
     }
 
     /*
@@ -203,21 +213,17 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         symbol: {$eq: "esh3"},
         timestamp: {$gte: ISODate("2023-03-08T23:00:00Z"), $lt: ISODate("2023-03-09T23:00:00Z")}
     }
+    */
+
+    /**
+     * load raw time series data between [start, end] inclusive
      */
     @Override
-    public PriceHistory loadSingleDay(String symbol, LocalDate tradeDate) {
-        var end = tradeDate.atTime(23, 0);
-        var iEnd = end.atZone(UTC).toInstant();
-        var iStart = end.minusDays(1).atZone(UTC).toInstant();
-        return makePriceHistory(loadBetween(symbol, iStart, iEnd));
-    }
-
-    @Override
-    public ArrayList<PriceBarM> loadBetween(String symbol, Instant iStart, Instant iEndExclusive) {
-        log.info("loadBetween {} [{}, {})", symbol, iStart, iEndExclusive);
+    public List<PriceBarM> loadBetween(String symbol, LocalDateTime start, LocalDateTime end) {
+        log.info("loadBetween {} [{}, {}]", symbol, start, end);
         var fSymbol = Filters.eq("symbol", symbol);
-        var fStart = Filters.gte("timestamp", Date.from(iStart));
-        var fEnd = Filters.lt("timestamp", Date.from(iEndExclusive));
+        var fStart = Filters.gte("timestamp", Date.from(start.atZone(UTC).toInstant()));
+        var fEnd = Filters.lte("timestamp", Date.from(end.atZone(UTC).toInstant()));
         var filter = Filters.and(fSymbol, fStart, fEnd);
 
         return db.get().getCollection(M1_COLLECTION, PriceBarM.class).find(filter).into(new ArrayList<>());
@@ -307,7 +313,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     /**
-     * return all Summary documents about the m1 data
+     * return Summary documents about the m1 data
      */
     @Override
     public List<Summary> queryM1Summary() {
@@ -318,16 +324,27 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     @Override
     public List<Summary> buildTradeDateIndex() {
-        newTradeDateIndexCollection(TRADE_DATE_COLLECTION);
-        var m = new HashMap<String, List<TradeDateIndexEntry>>();
-        var summaries = queryM1Summary();
+        createDailyTimeSeriesCollection(TRADE_DATE_INDEX_COLLECTION, true);
+        var map = new HashMap<String, List<TradeDateIndexEntry>>();
+        var summaries = queryM1Summary();   // get list of symbols in m1
         for (var summary : summaries) {
             var entries = queryContiguousRegions(summary.symbol(), 30);
-            m.put(summary.symbol(), entries);
+            map.put(summary.symbol(), entries);
         }
-        log.info("loaded {} summaries", m.size());
-        insertTradeDateIndexRows(m);
+        log.info("loaded {} summaries", map.size());
+        insertTradeDateIndexRows(map);
         return summaries;
+    }
+
+    @Override
+    public List<Summary> buildTradeDateIndex(String symbol) {
+        var result = getCollection(TRADE_DATE_INDEX_COLLECTION).deleteMany(Filters.eq("symbol", symbol));
+        log.info("deleted {} rows for symbol {}", result.getDeletedCount(), symbol);
+        var entries = queryContiguousRegions(symbol, 30);
+        insertTradeDateIndexRows(Map.of(symbol, entries));
+        return queryM1Summary().stream()
+                .filter(s -> s.symbol().equals(symbol))
+                .toList();
     }
 
     public static final String CONTINUOUS_BARS_PIPELINE = """
@@ -395,7 +412,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     void insertTradeDateIndexRows(Map<String, List<TradeDateIndexEntry>> data) {
-        var collection = getCollection(TRADE_DATE_COLLECTION);
+        var collection = getCollection(TRADE_DATE_INDEX_COLLECTION);
         InsertManyOptions options = new InsertManyOptions().ordered(false);
 
         for (var entry : data.entrySet()) {
@@ -411,7 +428,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             for (TradeDateIndexEntry e : rows) {
                 Document doc = new Document()
                         .append("symbol", symbol)
-                        .append("tradeDate", toDate(e.tradeDate().atStartOfDay()))
+                        .append("date", toDate(e.date().atStartOfDay()))
                         .append("start", toDate(e.start()))
                         .append("end", toDate(e.end()))
                         .append("volume", e.volume())
@@ -428,12 +445,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     public List<TradeDateIndexEntry> queryTradeDates(String symbol, long minVolume) {
-        var collection = getCollection(TRADE_DATE_COLLECTION, TradeDateMDB.class);
+        var collection = getCollection(TRADE_DATE_INDEX_COLLECTION, TradeDateMDB.class);
         var filter = Filters.and(Filters.eq("symbol", symbol), Filters.gte("volume", minVolume));
-        var results = collection.find(filter).sort(Sorts.ascending("tradeDate")).into(new ArrayList<>());
+        var results = collection.find(filter).sort(Sorts.ascending("date")).into(new ArrayList<>());
         return results.stream()
                 .map(e -> new TradeDateIndexEntry(
-                        asLocalDateTime(e.tradeDate()).toLocalDate(),
+                        asLocalDateTime(e.date()).toLocalDate(),
                         asLocalDateTime(e.start()),
                         asLocalDateTime(e.end()),
                         e.volume(),
@@ -462,7 +479,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     ) {}
 
     public record TradeDateMDB(
-            Date tradeDate,
+            Date date,
             Date start,
             Date end,
             long volume,
@@ -533,38 +550,6 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             double vwap
     ) {}
 
-    // Create daily time series collection
-    public void createDailyTimeSeriesCollection(String name) {
-        TimeSeriesOptions tsOptions = new TimeSeriesOptions("tradeDate")
-                .metaField("symbol")
-                .granularity(TimeSeriesGranularity.HOURS);
-
-        db.get().createCollection(
-                name,
-                new CreateCollectionOptions().timeSeriesOptions(tsOptions)
-        );
-
-        db.get().getCollection(name).createIndex(
-                Indexes.compoundIndex(
-                        Indexes.ascending("symbol"),
-                        Indexes.ascending("tradeDate")
-                ),
-                new IndexOptions()
-        );
-    }
-
-    /**
-     * drops and creates an empty collection
-     * @param name collection name
-     */
-    public void newDailyTimeSeriesCollection(String name) {
-        try {
-            getCollection(name).drop();
-        } catch (IllegalArgumentException e) {
-            log.error(e);
-        }
-        createDailyTimeSeriesCollection(name);
-    }
 
     /**
      * Build daily OHLC bars from m1 data for a symbol using trade date boundaries.
@@ -582,12 +567,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
             if (start == null || end == null ||
                     start.equals(LocalDateTime.MIN) || end.equals(LocalDateTime.MIN)) {
-                log.warn("Skipping {} tradeDate={} - missing {} times",
-                        symbol, td.tradeDate(), useRth ? "RTH" : "session");
+                log.warn("Skipping {} date={} - missing {} times",
+                        symbol, td.date(), useRth ? "RTH" : "session");
                 continue;
             }
 
-            var bar = aggregateSingleDay(symbol, td.tradeDate(), start, end);
+            var bar = aggregateSingleDay(symbol, td.date(), start, end);
             if (bar != null) {
                 dailyBars.add(bar);
             }
@@ -656,7 +641,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         for (DailyBar bar : bars) {
             Document doc = new Document()
                     .append("symbol", symbol)
-                    .append("tradeDate", toDate(bar.tradeDate().atStartOfDay()))
+                    .append("date", toDate(bar.date().atStartOfDay()))
                     .append("open", bar.open())
                     .append("high", bar.high())
                     .append("low", bar.low())
@@ -681,11 +666,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     /**
-     * Build daily time series for all symbols in the tradeDate index.
+     * Build daily time series for all symbols in the date index.
      */
     public void buildAllDailyTimeSeries() {
-        newDailyTimeSeriesCollection(DAILY_COLLECTION);
-        newDailyTimeSeriesCollection(DAILY_RTH_COLLECTION);
+        createDailyTimeSeriesCollection(DAILY_COLLECTION, true);
+        createDailyTimeSeriesCollection(DAILY_RTH_COLLECTION, true);
 
         var summaries = queryM1Summary();
         for (var summary : summaries) {
@@ -703,7 +688,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
         var results = collection
                 .find(Filters.eq("symbol", symbol.toLowerCase()))
-                .sort(Sorts.ascending("tradeDate"))
+                .sort(Sorts.ascending("date"))
                 .into(new ArrayList<>());
 
         return results.stream()
@@ -729,13 +714,13 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
         var filter = Filters.and(
                 Filters.eq("symbol", symbol.toLowerCase()),
-                Filters.gte("tradeDate", toDate(startDt.atStartOfDay())),
-                Filters.lte("tradeDate", toDate(endDt.atStartOfDay()))
+                Filters.gte("date", toDate(startDt.atStartOfDay())),
+                Filters.lte("date", toDate(endDt.atStartOfDay()))
         );
 
         var results = collection
                 .find(filter)
-                .sort(Sorts.ascending("tradeDate"))
+                .sort(Sorts.ascending("date"))
                 .into(new ArrayList<>());
 
         return results.stream()

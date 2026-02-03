@@ -196,7 +196,12 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     public void saveHistoricalData(String symbol, String contractMonth, Duration duration) {
         var hdAction = getHistoricalData(symbol, contractMonth, duration);
-        processHistoricalData(hdAction, true);
+        var result = processHistoricalData(hdAction, true);
+        PriceHistory ph = hdAction.asPriceHistory();
+        // trigger rebuild of index to include new rows if a partial day
+        if (result.documentsInserted < 1300) {
+            timeSeriesRepository.get().buildTradeDateIndex(ph.getSymbolLowerCase());
+        }
     }
 
     private void getHistoricalIndexData(String symbol, Duration duration) {
@@ -280,10 +285,11 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         return action;
     }
 
-    private Path processHistoricalData(HistoricalDataAction action, boolean fSave) {
+    private SaveResult processHistoricalData(HistoricalDataAction action, boolean fSave) {
         var bars = action.getBars();
         var contract = action.getContract();
         Path path = null;
+        int rowsInserted = 0;
         log.info("processHistoricalData {} {}", bars.size(), contract.localSymbol());
         if (!bars.isEmpty()) {
             log.info("bars from {} to {}", bars.getFirst().time(), bars.getLast().time());
@@ -304,10 +310,10 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 var index = history.index();
                 path = action.save(index.entries().getFirst().tradeDate());
                 // update repository
-                timeSeriesRepository.get().append(history);
+                rowsInserted = timeSeriesRepository.get().append(history);
             }
         }
-        return path;
+        return new SaveResult(path, rowsInserted);
     }
 
     private void processHistoricalIndexData(HistoricalDataAction action) {
@@ -377,4 +383,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             String exchange        // only non‐null for indexes
     ) {
     }
+
+    public record SaveResult(
+            Path filepath,
+            int documentsInserted
+    ) {}
 }
