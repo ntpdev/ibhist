@@ -23,6 +23,7 @@ import static ibhist.StringUtils.print;
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
     public static final String CONTRACT_MONTH = "202603";
+//    public static final String CONTRACT_MONTH = "202503";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -49,10 +50,10 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             try {
                 switch (action) {
                     //TODO add proper entry point
-//                    case ES_DAY -> saveRangeHistoricalData("ES", CONTRACT_MONTH, LocalDate.of(2025,3,22), 8);  //saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_10);
                     case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
-                    case HISTORICAL -> saveMultipleHistoricalData(Duration.DAY_10);
-                    case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // never called
+                    case LATEST_WEEK -> saveLatestData(Duration.DAY_10);
+                    case HISTORICAL -> saveHistoricalDataRange("NQ", "202409", LocalDate.of(2024,9,21), 8);
+                    case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // unused
                 }
             } finally {
                 disconnect();
@@ -124,7 +125,10 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         return action.isPresent();
     }
 
-    private void saveMultipleHistoricalData(Duration duration) {
+    /**
+     * save latest historical ES NQ TICK-NYSE for current duration
+     */
+    private void saveLatestData(Duration duration) {
         saveHistoricalData("ES", CONTRACT_MONTH, duration);
         saveHistoricalData("NQ", CONTRACT_MONTH, duration);
         getHistoricalIndexData("TICK-NYSE", duration);
@@ -202,7 +206,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         PriceHistory ph = hdAction.asPriceHistory();
         // trigger rebuild of index to include new rows if a partial day
         if (result.documentsInserted < 1300) {
-            timeSeriesRepository.get().buildTradeDateIndex(ph.getSymbolLowerCase());
+            timeSeriesRepository.get().buildTradeDateIndex(ph.getSymbol());
         }
     }
 
@@ -282,7 +286,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate, MonitorManager manager) {
         var action = new HistoricalDataAction(m_client, id, queue, contract, null, duration, keepUpToDate, manager);
-//        var action = new HistoricalDataAction(m_client, id, queue, contract, LocalDate.of(2025, 11, 9), duration, keepUpToDate, manager);
+//        var action = new HistoricalDataAction(m_client, id, queue, contract, LocalDate.of(2025, 11, 9), bars, keepUpToDate, manager);
         sendRequest(action);
         return action;
     }
@@ -312,7 +316,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 var index = history.index();
                 path = action.save(index.entries().getFirst().tradeDate());
                 // update repository
-                rowsInserted = timeSeriesRepository.get().append(history);
+//                rowsInserted = timeSeriesRepository.get().append(history);
             }
         }
         return new SaveResult(path, rowsInserted);
@@ -331,7 +335,6 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     private void requestMultipleHistoricalData(Contract contract, LocalDate endDate, int periods) {
         List<LocalDate> periodEndDates = calculatePeriodEndDates(endDate, periods, 14);
-
         log.info("Fetching {} periods ending at dates: {}", periods, periodEndDates);
 
         for (LocalDate periodEnd : periodEndDates) {

@@ -49,7 +49,16 @@ public class ReplImpl implements Repl {
 
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        print("[yellow]enter command\nx| load sym | info n | ib | p n | minmax n=15\nx - exit\nload zesu4\ninfo 1\nib - load single day from ib\nrt - real time bars\np n - print first or last n bars or bars at time hh:mm[/]\n");
+        print("""
+[yellow]enter command
+x| load sym | info n | ib | p n | minmax n=15
+x - exit
+load zesh6
+info index-entry
+p n - print first or last n bars or bars at time hh:mm
+conn tws / disc tws - connect disconnect from TWS
+show es - fetch hist data from ib and update mdb
+stream es - start historical streaming data[/]""");
         String line;
         MonitorManager monitorManager = new MonitorManager();
         while ((line = reader.readLine()) != null) {
@@ -113,13 +122,15 @@ public class ReplImpl implements Repl {
                 yield true;
             }
             case "show" -> {
-                var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1);
+                var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_2);
                 history = action.asPriceHistory();
                 print(history.toString());
-                var path = action.save(history.indexEntry(0).tradeDate());
-                tsRepository.append(history);
-                print(history.toString());
                 print(history.intradayPriceInfo(-1));
+                var path = action.save(history.indexEntry(0).tradeDate());
+                history.addStandardColumns();
+                tsRepository.append(history);
+                tsRepository.buildTradeDateIndex(history.getSymbol());
+                tsRepository.updateMinvolForLastDay(history);
                 yield true;
             }
             case "stream" -> {
@@ -215,11 +226,9 @@ public class ReplImpl implements Repl {
     }
 
     void load(String s) {
-        var optH = repository.get().load(s, false);
+        var optH = repository.get().load(s, false, true);
         if (optH.isEmpty()) return;
         history = optH.get();
-        var vwap = history.vwap("vwap");
-        var strat = history.strat("strat");
         StringBuilder sb = new StringBuilder();
         sb.append("[yellow]");
         for (var entry : history.index().entries()) {

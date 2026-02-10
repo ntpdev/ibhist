@@ -14,5 +14,6 @@ public record PriceBarM(
     double low,
     double close,
     double volume,
-    double vwap) {}
+    double vwap,
+    double ema) {}
 

@@ -48,6 +48,38 @@ class PriceHistoryRepositoryTest {
     }
 
     @Test
+    void test_findAllSymbols() {
+        var repo = new PriceHistoryRepository();
+        var xs = repo.findAllSymbols();
+        assertThat(xs).contains("esh5", "esm5", "esu5", "esz5", "esh6", "nqh6");
+    }
+
+    @Test
+    void test_findAllCsvFiles() {
+        var repo = new PriceHistoryRepository();
+        var xs = repo.findAllCsvFiles();
+        assertThat(xs.size()).isGreaterThan(8);
+    }
+
+    @Test
+    void test_findSymbolFiles() {
+        var repo = new PriceHistoryRepository();
+        var xs = repo.findSymbolFiles("esh6");
+        repo.load("esh6");
+        assertThat(xs.size()).isGreaterThan(1);
+    }
+
+
+    @Test
+    void test_load_arbitrary_file() {
+        var repo = new PriceHistoryRepository();
+        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260206.csv"));
+        hist.addStandardColumns();
+        log.info(hist);
+        log.info(hist.index().makeMessagesMap(-1));
+    }
+
+    @Test
     void test_expandingWindow() {
         var history = getPriceHistory();
         var vwap = history.vwap("vwap");
@@ -128,24 +160,20 @@ class PriceHistoryRepositoryTest {
     record Point(int index, double value, int count) {
     }
 
-    @Test
-    void test_loadSingleDay() {
-        try {
-            var repository = new PriceHistoryRepository();
-            var xs = repository.findFiles("zesu4");
-            for (Path p : xs) {
-                var history = repository.load("zESU4", p);
-                history.vwap("vwap");
-                System.out.println(history);
-                var bars = history.rthBars();
-                for (PriceHistory.Bar bar : bars) {
-                    System.out.println(bar.asDailyBar());
-                }
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
+//    @Test
+//    void test_loadSingleDay() {
+//        var repository = new PriceHistoryRepository();
+//        var xs = repository.findSymbolFiles("zesu4");
+//        for (Path p : xs) {
+//            var history = repository.load("zESU4", p);
+//            history.vwap("vwap");
+//            System.out.println(history);
+//            var bars = history.rthBars();
+//            for (PriceHistory.Bar bar : bars) {
+//                System.out.println(bar.asDailyBar());
+//            }
+//        }
+//    }
 
     @Test
     void test_findReversal() {

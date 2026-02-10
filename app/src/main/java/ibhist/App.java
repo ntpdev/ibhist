@@ -7,6 +7,12 @@ import com.google.inject.Guice;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+
+import static ibhist.StringUtils.ANSI_GREEN;
+import static ibhist.StringUtils.ANSI_RESET;
+
 public class App {
     private static final Logger log = LogManager.getLogger(App.class.getSimpleName());
 
@@ -21,8 +27,14 @@ public class App {
      * @param args command line arguments
      */
     static void main(String[] args) {
-        log.info("Java version: {}", System.getProperty("java.version"));
+        // Force console to UTF-8 - this works when launching directly from Windows Terminal not via gradle run
+        try {
+            new ProcessBuilder("cmd", "/c", "chcp", "65001", ">nul").inheritIO().start().waitFor();
+            System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
+            System.out.println("Output charset: " + System.out.charset() + ANSI_GREEN + " ▲ ▼" + ANSI_RESET);
+        } catch (Exception e) {}
 
+        log.info("Java version: {}", System.getProperty("java.version"));
         var injector = Guice.createInjector(new AppModule());
 
         // Determine the command - default to "day" if no args or empty
@@ -30,6 +42,10 @@ public class App {
         log.info("ibhist '{}'", command);
 
         switch (command) {
+            case "week" -> {
+                var ibConnector = injector.getInstance(IBConnector.class);
+                ibConnector.process(IBConnector.ConnectorAction.LATEST_WEEK);
+            }
             case "hist" -> {
                 var ibConnector = injector.getInstance(IBConnector.class);
                 ibConnector.process(IBConnector.ConnectorAction.HISTORICAL);

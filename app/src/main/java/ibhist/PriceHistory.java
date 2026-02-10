@@ -62,10 +62,6 @@ public class PriceHistory implements Serializable {
         return symbol;
     }
 
-    public String getSymbolLowerCase() {
-        return symbol.toLowerCase();
-    }
-
     public LocalDateTime[] getDates() {
         return dates;
     }
@@ -137,6 +133,24 @@ public class PriceHistory implements Serializable {
         return this;
     }
 
+    public PriceHistory insert(int index, LocalDateTime date, double open, double high, double low, double close, double volume, double vwap, double ema) {
+        expandIfNecessary(index);
+        dates[index] = date;
+        columns.get(0).values[index] = open;
+        columns.get(1).values[index] = high;
+        columns.get(2).values[index] = low;
+        columns.get(3).values[index] = close;
+        columns.get(4).values[index] = volume;
+        columns.get(5).values[index] = vwap;
+        columns.get(6).values[index] = ema;
+        ++size;
+        return this;
+    }
+
+    public PriceHistory add(LocalDateTime date, double open, double high, double low, double close, double volume, double vwap, double ema) {
+        return insert(size, date, open, high, low, close, volume, vwap, ema);
+    }
+
     public PriceHistory add(LocalDateTime date, double open, double high, double low, double close, double volume, double vwap) {
         return insert(size, date, open, high, low, close, volume, vwap);
     }
@@ -183,8 +197,8 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
-    Column ema(String a, String output, int period) {
-        var as = getColumn(a);
+    Column ema(String input, String output, int period) {
+        var as = getColumn(input);
         var c = newColumn(output);
         int i = 0;
         double total = 0;
@@ -352,6 +366,13 @@ public class PriceHistory implements Serializable {
         hiloImpl(highs, hc, n >= 0 ? n : size + n);
     }
 
+    public void addStandardColumns() {
+        vwap("vwap");
+        columns.add(ema("close", "ema", 87));
+        strat("strat");
+    }
+
+
     public SummaryStats summaryStats(String name, int start, int end) {
         return summaryStats(getColumn(name), start, end);
     }
@@ -476,6 +497,7 @@ public class PriceHistory implements Serializable {
         var closes = getColumn("close");
         var volumes = getColumn("volume");
         var vwaps = getColumn("vwap");
+        var emas = findColumn("ema");
         double high = -1e6;
         double low = 1e6;
         double vol = 0;
@@ -484,7 +506,9 @@ public class PriceHistory implements Serializable {
             low = Math.min(lows[i], low);
             vol += volumes[i];
         }
-        return new Bar(dates[s], dates[e].plusMinutes(1), opens[s], high, low, closes[e], vol, vwaps[e]);
+        return emas == null
+                ? new Bar(dates[s], dates[e].plusMinutes(1), opens[s], high, low, closes[e], vol, vwaps[e])
+                : new Bar(dates[s], dates[e].plusMinutes(1), opens[s], high, low, closes[e], vol, vwaps[e], emas[e]);
     }
 
     public Bar aggregrateDaily(IndexEntry e) {
@@ -492,12 +516,18 @@ public class PriceHistory implements Serializable {
     }
 
     public @Nullable Bar aggregrateRth(IndexEntry e) {
-        return e.rthStart() >= 0 && e.isComplete() ? aggregrate(e.rthStart(), e.rthEnd()) : null;
+        return e.hasRth() && e.isComplete() ? aggregrate(e.rthStart(), e.rthEnd()) : null;
     }
 
     // inclusive end dates
     public record IndexEntry(LocalDate tradeDate, int start, int end, int euStart, int euEnd,
                              int rthStart, int rthEnd, boolean isComplete) {
+        boolean hasEU() {
+            return euStart >= 0;
+        }
+        boolean hasRth() {
+            return rthStart >= 0;
+        }
     }
 
     public Index index() {
@@ -579,14 +609,13 @@ public class PriceHistory implements Serializable {
         return q;
     }
 
-    int[] firstBars(boolean first, int minGap) {
+    int[] firstBars(int minGap) {
         var idx = new int[128];
         int c = 0;
         LocalDateTime last = null;
         for (int i = 0; i < length(); i++) {
             var date = dates[i];
-            if ((last != null && ChronoUnit.MINUTES.between(last, date) > minGap) ||
-                    (last == null && first)) {
+            if (last == null || ChronoUnit.MINUTES.between(last, date) > minGap) {
                 idx[c++] = i;
             }
             last = date;
@@ -594,6 +623,7 @@ public class PriceHistory implements Serializable {
         return Arrays.copyOf(idx, c);
     }
 
+    // return inclusive ends
     int[] lastBars(int[] idxs) {
         int len = idxs.length;
         var ends = Arrays.copyOfRange(idxs, 1, len + 1);
@@ -633,7 +663,7 @@ public class PriceHistory implements Serializable {
         start = max(start, 0);
         end = Math.min(end, length());
         var sb = new StringBuilder();
-        sb.append("time  open    high    low     close  volume nvol vwap    ema  ticks strat chi clo").append(System.lineSeparator());
+        sb.append("time  open    high    low     close     vol nvol   vwap  ema  tics st chi clo (op vp ema)").append(System.lineSeparator());
         var dates = getDates();
         var opens = getColumn("open");
         var highs = getColumn("high");
@@ -732,7 +762,7 @@ public class PriceHistory implements Serializable {
 
         private Index() {
             LocalDateTime[] dates = PriceHistory.this.getDates();
-            var starts = PriceHistory.this.firstBars(true, 1);
+            var starts = PriceHistory.this.firstBars(1);
             var ends = PriceHistory.this.lastBars(starts);
             for (int i = 0; i < starts.length; i++) {
                 indexEntries.add(createIndexEntry(dates, starts[i], ends[i]));
@@ -743,16 +773,16 @@ public class PriceHistory implements Serializable {
             // eu start +9:00 +540 rth start +15:30 +930 from glbx open of 23:00
             int euStart = start + 540 < endInclusive ? start + 540 : -1;
             int rthStart = start + 930 < endInclusive ? start + 930 : -1;
-            int rthEnd = start + 1319 < endInclusive ? start + 1319 : -1;
+            int rthEnd = rthStart > 0 ? Math.min(start + 1319, endInclusive) : -1;
             return new IndexEntry(
                     rthStart > 0 ? dates[rthStart].toLocalDate() : dates[start].toLocalDate().plusDays(1),
                     start,
                     endInclusive,
                     euStart,
-                    rthStart > 0 ? rthStart - 1 : -1,
+                    rthStart > 0 ? rthStart - 1 : endInclusive,
                     rthStart,
                     rthEnd,
-                    rthEnd > 0);
+                    rthEnd > 0 && endInclusive > rthEnd);
         }
 
 
@@ -776,12 +806,12 @@ public class PriceHistory implements Serializable {
             putMessage(priceMessages, glbx.high(), "glbx hi");
             putMessage(priceMessages, glbx.low(), "glbx lo");
 
-            if (idx.euStart() >= 0) {
+            if (idx.hasEU()) {
                 var eu = aggregrate(idx.euStart(), idx.euEnd());
                 putMessage(priceMessages, eu.open(), "eu open");
             }
 
-            if (idx.rthStart() >= 0) {
+            if (idx.hasRth()) {
                 var rth = aggregrate(idx.rthStart(), idx.rthEnd());
                 putMessage(priceMessages, rth.open(), "[green]open[/]");
                 putMessage(priceMessages, rth.high(), "[cyan]high[/]");
@@ -791,7 +821,7 @@ public class PriceHistory implements Serializable {
                 putMessage(priceMessages, rthFirstHour.low(), "H1 lo");
             }
 
-            if (prev != null && prev.rthStart() >= 0) {
+            if (prev != null && prev.hasRth()) {
                 var rth = aggregrate(prev.rthStart(), prev.rthEnd());
                 putMessage(priceMessages, rth.high(), "[cyan]yh[/]");
                 putMessage(priceMessages, rth.low(), "[red]yl[/]");
@@ -820,8 +850,30 @@ public class PriceHistory implements Serializable {
         }
     }
 
-    public record Bar(LocalDateTime start, LocalDateTime end, double open, double high, double low,
-                      double close, double volume, double vwap) {
+    public record Bar(
+            LocalDateTime start,
+            LocalDateTime end,
+            double open,
+            double high,
+            double low,
+            double close,
+            double volume,
+            double vwap,
+            double ema
+    ) {
+        public Bar(
+                LocalDateTime start,
+                LocalDateTime end,
+                double open,
+                double high,
+                double low,
+                double close,
+                double volume,
+                double vwap
+        ) {
+            this(start, end, open, high, low, close, volume, vwap, 0.0);
+        }
+
 
         public static Bar fromRealTimeBar(RealTimeBar bar) {
             return new PriceHistory.Bar(bar.dt(), bar.dt(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume(), bar.wap());

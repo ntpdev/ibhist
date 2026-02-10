@@ -6,6 +6,7 @@ public interface IBConnector extends ActionProvider {
 
     enum ConnectorAction {
         ES_DAY,
+        LATEST_WEEK,
         HISTORICAL,
         REALTIME
     }

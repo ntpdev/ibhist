@@ -7,11 +7,23 @@
 ## gradle commands
 
 gradle run
-gradle run --args="repl"
+gradle run --args repl
 gradle installDist
 
-cd \\code\\ibhist\\app\\build\\install\\app\\bin  
-.\\app.bat repl
+```powershell
+param(
+    [Parameter(Mandatory=$true)]
+    [ValidateSet("day", "repl")]
+    [string]$Mode
+)
+
+gradle installDist
+Push-Location ".\app\build\install\app\bin\"
+& .\app.bat $Mode
+Pop-Location
+```
+
+use bat to launch repl to avoid codepage issue when going via gradle
 
 running App.main with
 

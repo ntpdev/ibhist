@@ -62,9 +62,9 @@ public class HistoricalDataAction extends ActionBase {
         }
 //        var d = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusMinutes(1);
 //        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss")); 20231001 22:00:00
-        log.info("reqHistoricalData reqId = {} symbol = {} duration = {}", requestId, contract.localSymbol(), duration.getCode());
+        log.info("reqHistoricalData reqId = {} symbol = {} bars = {}", requestId, contract.localSymbol(), duration.getCode());
         // add end explicit end date to get up to that point
-//        client.reqHistoricalData(requestId, contract, "20250718 23:00:00 Europe/London", duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
+//        client.reqHistoricalData(requestId, contract, "20250718 23:00:00 Europe/London", bars.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
         client.reqHistoricalData(requestId, contract, upTo, duration.getCode(), "1 min", "TRADES", 0, 1, keepUpToDate, null);
     }
 
@@ -201,8 +201,8 @@ public class HistoricalDataAction extends ActionBase {
         // to be a guice class and Action as well with a custom factory
         try {
             String fname = "z%s %s.csv".formatted(getSymbol(), startDate.format(DateTimeFormatter.BASIC_ISO_DATE));
-            var p = Path.of("c:\\temp\\ultra\\", fname);
-            p = Path.of(System.getProperty("user.home"), "Documents", "data", fname);
+            var p = Path.of(System.getProperty("user.home"), "Documents", "data", fname);
+            //Path.of("c:\\temp\\ultra\\", fname);
             log.info("saving file " + p);
             Files.writeString(p, barsAsCsv());
             return p;
