@@ -7,23 +7,30 @@ A Java CLI application that connects to Interactive Brokers (IB) via the TWS (Tr
 
 The application uses CSV files and MongoDB for persistent storage of time series data, Guice for dependency injection, and integrates with the Interactive Brokers trading platform.
 
-The TWS API is asynchronous in nature. Requests are made on one thread and the response are sent back ansynchronously over a socket connection. IBConnector handles sending the requests and EWrapperImpl processes the responses. Messages are modelled using the XxxAction classes.
+The TWS API is asynchronous in nature. Requests are made on one thread and responses are sent back asynchronously over a socket connection. IBConnector handles sending the requests and EWrapperImpl processes the responses. Messages are modelled using the XxxAction classes.
 
-The main data structure is PriceHistory.java which holds timeseries data as columns along with calculated indicators. The data can be loaded from csv files via a PriceHistoryRepository or from MongoDB timeseries via TimeSeriesRepository.
-
-**Features:**
-- Historical data processing (`hist` mode)
-- ES day data processing (`day` mode - default)
-- Real-time bar data streaming (`rt` mode)
-- Interactive REPL mode (`repl`)
-- MongoDB and CSV files for time series data.
+The main data structure is PriceHistory.java which holds timeseries data as columns along with calculated indicators. Data can be loaded from CSV files via PriceHistoryRepository or from MongoDB timeseries via TimeSeriesRepository.
 
 ## Environment
 - Java JDK 25
 - Gradle 8 with Kotlin DSL
 - Guice for dependency injection
-- MongoDB 8 via the native MongoDB Java database driver 5.6.x
-- Log4j2 is used for logging
+- MongoDB 8 via native MongoDB Java driver 5.6.x
+- Log4j2 for logging
+
+## Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `./gradlew build` | Build project (compile + test) |
+| `./gradlew test` | Run all unit tests |
+| `./gradlew test --tests "PriceHistoryTest"` | Run single test class |
+| `./gradlew test --tests "PriceHistoryTest.ema_step"` | Run single test method |
+| `./gradlew run` | Run application (defaults to `day` mode) |
+| `./gradlew run --args="repl"` | Run with REPL mode |
+| `./gradlew run --args="hist"` | Run in historical data mode |
+| `./gradlew run --args="rt"` | Run in real-time data mode |
+| `./gradlew installDist` | Create install distribution |
 
 ## Directory Structure
 
@@ -33,119 +40,101 @@ c:/code/ibhist/
 │   ├── build.gradle.kts          # Application build configuration
 │   ├── lib/                      # Local JAR dependencies (TWS API jars)
 │   └── src/
-│       ├── main/
-│       │   ├── java/ibhist/      # Main source code
-│       │   │   ├── App.java      # Application entry point
-│       │   │   ├── AppModule.java # Guice module
-│       │   │   ├── EWrapperImpl.java # The subclass that receives asynchronous call backs from TWS
-│       │   │   ├── IBConnector.java / IBConnectorImpl.java
-│       │   │   ├── Repl.java / ReplImpl.java
-│       │   │   ├── TimeSeriesRepository.java / TimeSeriesRepositoryImpl.java
-│       │   │   ├── PriceHistory.java / PriceHistoryRepository.java
-│       │   │   ├── RealTimeBar.java / RealTimeHistory.java
-│       │   │   ├── OrderBuilder.java / OrderDetails.java
-│       │   │   ├── HistoricalDataAction.java / RealTimeBarsAction.java
-│       │   │   ├── ContractFactory.java / ContractFactoryImpl.java
-│       │   │   └── ...           # Other utility classes
-│       │   └── resources/
-│       │       └── log4j2.xml    # Log4j2 logging configuration
-│       └── test/
-│           ├── java/ibhist/      # Unit tests
-│           │   └── ...           # Other test classes
-│           └── resources/
-│               └── log4j2.xml    # Test logging configuration
+│       ├── main/java/ibhist/     # Main source code
+│       │   ├── App.java          # Application entry point
+│       │   ├── AppModule.java    # Guice module
+│       │   ├── EWrapperImpl.java # Async callbacks from TWS
+│       │   ├── IBConnector.java  # Interface for IB connection
+│       │   ├── IBConnectorImpl.java
+│       │   ├── Action.java / ActionBase.java / XxxAction.java
+│       │   ├── PriceHistory.java # Core timeseries data structure
+│       │   ├── TimeSeriesRepository.java / TimeSeriesRepositoryImpl.java
+│       │   └── ...
+│       └── test/java/ibhist/     # Unit tests
 ├── settings.gradle.kts           # Gradle project settings
-├── gradlew                       # Gradle wrapper (Unix)
-├── gradlew.bat                   # Gradle wrapper (Windows)
-├── README.md                     # Quick reference and commands
-└── AGENTS.md                # This file
+└── README.md
 ```
-
-## Naming Conventions
-Follow standard Java naming patterns for classes and variable. Main services are injected using Guice and are named MyService for the interface and MyServiceImpl for the implementation.
-
-**TEST** methods should be named using longer lowercase names that describe the scenario. Example - moving_average_calculation
-
-**Build Commands:**
-
-| Command | Description |
-|---------|-------------|
-| `./gradlew run` | Run the application (defaults to `day` mode) |
-| `./gradlew run --args="repl"` | Run with REPL mode |
-| `./gradlew run --args="hist"` | Run in historical data mode |
-| `./gradlew run --args="rt"` | Run in real-time data mode |
-| `./gradlew installDist` | Create install distribution |
-| `./gradlew test` | Run all unit tests |
-| `./gradlew build` | Build the project (compile + test) |
-
 
 ## Java Coding Style
 
-Use modern Java 25 features where appropriate. Prefer these patterns:
+### Modern Java Features (JDK 25)
 
-1. **Records** for immutable data classes (`RealTimeBar`, `OrderDetails`, action classes). If a class is just fields + accessors with no mutable state, it should be a record.
+1. **Records** for immutable data classes (`RealTimeBar`, `OrderDetails`, action classes). If a class is just fields + accessors with no mutable state, make it a record.
 
-2. **Sealed interfaces/classes** for closed type hierarchies. The `XxxAction` classes are a natural fit — a sealed interface with a permitted set of action records makes the dispatch exhaustive and self-documenting.
+2. **Sealed interfaces/classes** for closed type hierarchies. The `XxxAction` classes are candidates for sealed interfaces.
 
-3. **Pattern matching for `instanceof`** — replace `if (x instanceof Foo) { Foo f = (Foo) x; ... }` with `if (x instanceof Foo f) { ... }`.
+3. **Pattern matching for `instanceof`** — use `if (x instanceof Foo f) { ... }` instead of casting.
 
-4. **Switch expressions with pattern matching** — use `switch` as an expression (with `->` arms) rather than chains of `if/else`. Especially useful when dispatching on sealed action types.
+4. **Switch expressions with `->` arms** — prefer over `if/else` chains, especially for sealed types.
 
-5. **Text blocks** for any multi-line strings — SQL queries, JSON templates, log messages with structure. No more string concatenation or `StringBuilder` for these.
+5. **Text blocks** for multi-line strings (SQL, JSON, formatted output).
 
-6. **`var`** for local variables where the type is obvious from the right-hand side. Don't use it when it would obscure the type (e.g. return values from generic methods). Do not use var for value types like int or String.
+6. **`var`** for local variables where type is obvious from RHS. Do NOT use for value types (int, String) or when type would be obscured.
 
-7. **Named patterns / record patterns** — deconstruct records directly in `switch` or `instanceof` checks rather than calling accessors manually.
+7. **`List.of()` / `Map.of()`** for immutable collections. Use `List.copyOf()` for immutable views.
 
-8. **Prefer `List.of()` / `Map.of()`** for immutable collections over `Collections.unmodifiableList()` or ad-hoc construction. Use `List.copyOf()` when you need an immutable view of a mutable collection.
+8. **`Optional<T>`** for nullable returns — never return `null` from repository/factory interfaces.
 
-9. **Avoid raw or legacy exception patterns** — prefer specific checked exceptions or well-typed unchecked exceptions over broad `catch (Exception e)`. Don't swallow exceptions silently.
+### Naming Conventions
 
-10. **`Optional` for nullable returns** — methods that may legitimately return no value should return `Optional<T>` rather than `null`, particularly in repository and factory interfaces.
+- **Classes**: `PascalCase`. Services: `MyService` interface, `MyServiceImpl` implementation.
+- **Methods**: `camelCase`. Use descriptive names that read well in tests.
+- **Test methods**: `snake_case` describing scenario, e.g., `ema_step`, `local_max_decreasing`.
+- **Constants**: `SCREAMING_SNAKE_CASE` or `camelCase` for private static finals.
 
-11. **Ternary operator for simple conditional expressions** — use `condition ? valueA : valueB` where it keeps a single expression readable. Don't use it for complex or nested conditions; if you need more than one line to understand it, use a regular `if/else`.
+### Imports
 
-12. **`@Nullable` on parameters and return types that can be null** — use `org.jetbrains.annotations.Nullable` to explicitly mark these. The default assumption across the codebase is that parameters are non-null; null checks should be avoided unless a parameter is annotated. When a nullable value is received, handle or guard it at the boundary rather than threading null through the call chain.
+- Import specific classes, not `.*` wildcards.
+- Order: java.*, javax.*, third-party (com.*, org.*), project packages.
+- Static imports: use for assertion methods and constants.
+
+### Nullability
+
+- Default assumption: parameters are non-null.
+- Use `@Nullable` (org.jetbrains.annotations.Nullable) for nullable parameters/returns.
+- Guard nullable values at boundaries, don't thread null through call chain.
+
+### Error Handling
+
+- Throw specific exceptions with descriptive messages.
+- Don't catch broad `Exception` or swallow exceptions silently.
+- Log errors with context before rethrowing when appropriate.
+
+### Comments
+
+- Avoid inline comments explaining "what" — code should be self-documenting.
+- Javadoc on public APIs where behavior isn't obvious from signature.
+- Use TODO sparingly, with context.
 
 ## Libraries
 
-### Runtime Dependencies
+### Runtime
+- org.jetbrains:annotations — Nullability annotations
+- com.google.guava:guava — Core utilities
+- com.google.inject:guice — Dependency injection
+- org.apache.logging.log4j:log4j-core — Logging
+- org.mongodb:mongodb-driver-sync:5.6 — MongoDB driver
+- TWS API JARs (local) — Interactive Brokers API
 
-- org.jetbrains:annotations Nullability annotations
-- com.google.guava:guava latest Google's core Java libraries
-- com.google.inject:guice Dependency injection framework
-- org.apache.logging.log4j:log4j-core Logging framework
-- org.mongodb:mongodb-driver-sync MongoDB database driver 5.6
-- TWS API JARs - Interactive Brokers Trading API
+### Test
+- org.junit.jupiter:junit-jupiter:5.14 — JUnit 5
+- org.assertj:assertj-core:3.27 — Fluent assertions
+- org.mockito:mockito-core:5.21 — Mocking
 
-### Test Dependencies
+## MongoDB Collections
 
-- org.junit.jupiter:junit-jupiter JUnit 5 testing framework
-- org.assertj:assertj-core AssertJ 3.27 Fluent assertion library
-- org.mockito:mockito-core Mocking framework
+| Collection | timeField | metaField | Granularity | Description |
+|------------|-----------|-----------|-------------|-------------|
+| `m1` | `timestamp` | `symbol` | minutes | Source of truth. 1-min OHLCV bars. |
+| `tradeDate` | `tradeDate` | `symbol` | hours | Trading session index with RTH bounds. |
+| `daily` | `tradeDate` | `symbol` | hours | Daily OHLCV (full session). |
+| `dailyRth` | `tradeDate` | `symbol` | hours | Daily OHLCV (RTH only). |
 
-## MongoDB Timeseries collections
+**Symbols**: Lowercase. Futures use CME notation: `esz5` = ES Dec 2025 (`z`=Dec, `5`=2025). Month codes: F=Jan, G=Feb, H=Mar, J=Apr, K=May, M=Jun, N=Jul, Q=Aug, U=Sep, V=Oct, X=Nov, Z=Dec.
 
-**Symbols:** The `symbol` field is always lowercase. There are two types of symbol: futures contracts and index data. Futures symbols use standard CME notation — the root symbol followed by the expiry month letter and single-digit year. For example, `esz5` is the ES (E-mini S&P 500) December 2025 contract (`z` = December, `5` = 2025). Month codes are: F=Jan, G=Feb, H=Mar, J=Apr, K=May, M=Jun, N=Jul, Q=Aug, U=Sep, V=Oct, X=Nov, Z=Dec. Index symbols are plain names like `tick-nyse` with no expiry encoding.
+**Trade Date**: CME logical trading day, not calendar date. Session starts previous evening (e.g., Monday trade date starts Sunday 23:00 UTC).
 
-**Futures trading context:** CME futures trade nearly 24 hours a day, Sunday evening through Friday afternoon US Eastern time. A "trade date" is not a calendar date — it is the logical trading day as defined by CME. For example, the ES session for trade date Monday 2025-03-10 actually starts Sunday evening 2025-03-09 at 23:00 UTC. The `tradeDate` field represents this logical CME trade date, not the calendar date the bars fall on. RTH (Regular Trading Hours) is the subset of the session that corresponds to the main equity market hours (9:30–16:00 US Eastern), as distinct from the extended overnight/globex session. Index data follows standard exchange hours and does not have the overnight session complexity.
-
-**Data flow:**
-
-| Collection | timeField | metaField | Granularity | Contains | Description |
-|---|---|---|---|---|---|
-| `m1` | `timestamp` | `symbol` | minutes | futures + index | Source of truth. 1-minute OHLCV bars for all symbols. All other collections are derived from this. |
-| `tradeDate` | `tradeDate` | `symbol` | hours | futures + index | Index of contiguous trading sessions. Built by scanning `m1` for gaps > 30 mins. Includes RTH start/end times. Unique index on `(symbol, tradeDate)`. |
-| `daily` | `tradeDate` | `symbol` | hours | futures only | Daily OHLCV bars aggregated from `m1` using full session boundaries. |
-| `dailyRth` | `tradeDate` | `symbol` | hours | futures only | Daily OHLCV bars aggregated from `m1` using RTH boundaries only. |
-
-CSV or IB API ───→ m1 ──────────────→ daily, dailyRTH
-                   │                 ▲
-                   └──→ tradeDate ───┘
-
-Historical raw time series data at 1 minute resolution is loaded from CSV files into the m1 collection. The tradeDate collection is then populated with the timestamps for each trading days and symbol. For futures contracts, the m1 data is aggregated into the daily and dailyRth collections.
-
-### External Resources
+## External Resources
 
 - [Interactive Brokers API Documentation](https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/)
 - [TWS API GitHub](https://interactivebrokers.github.io/)

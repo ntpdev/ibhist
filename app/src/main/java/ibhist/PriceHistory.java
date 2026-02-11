@@ -218,9 +218,17 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
-    // add vwap col
+    /**
+     * Add an anchored vwap column. The price used for each bar is either
+     * the wap column if available or the mid point
+     * @param name
+     * @return
+     */
     Column vwap(String name) {
-        var mids = average("high", "low", "mid");
+        var wap = findColumn("wap");
+        if (wap == null) {
+            wap = average("high", "low", "mid").values;
+        }
         var vols = getColumn("volume");
         var c = newColumn(name);
         double cumVol = 0;
@@ -234,7 +242,7 @@ public class PriceHistory implements Serializable {
 
             double vol = vols[i];
             cumVol += vol;
-            totalPV += vol * mids.values[i];
+            totalPV += vol * wap[i];
             c.values[i] = totalPV / cumVol;
             lastDt = dates[i];
         }

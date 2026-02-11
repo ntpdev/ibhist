@@ -9,6 +9,7 @@ public class AppModule extends AbstractModule {
         bind(IBConnector.class).to(IBConnectorImpl.class);
         bind(ContractFactory.class).to(ContractFactoryImpl.class);
         bind(TimeSeriesRepository.class).to(TimeSeriesRepositoryImpl.class);
+        bind(PriceHistoryRepository.class).to(PriceHistoryRepositoryImpl.class);
         bind(Repl.class).to(ReplImpl.class);
     }
 }

@@ -37,5 +37,7 @@ public class ContractDetailsAction extends ActionBase {
     public void onContractDetails(ContractDetails contractDetails) {
         this.contractDetails = contractDetails;
         this.contract = contractDetails.contract();
+        // tz = US/Central
+        log.info("reqContractDetails reqId = {} symbol = {} tz = {}", requestId, contract.symbol(), contractDetails.timeZoneId());
     }
 }

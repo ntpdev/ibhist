@@ -23,7 +23,7 @@ import static ibhist.StringUtils.print;
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
     public static final String CONTRACT_MONTH = "202603";
-//    public static final String CONTRACT_MONTH = "202503";
+    //    public static final String CONTRACT_MONTH = "202503";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -33,13 +33,15 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     private final Map<Integer, Action> actions = new TreeMap<>(); // holds outstanding async requests
     private final BlockingQueue<Action> queue = new ArrayBlockingQueue<>(16); // holds completed actions sent from worker thread
 
-    private final Provider<TimeSeriesRepository> timeSeriesRepository;
+    private final Provider<TimeSeriesRepository> timeSeriesRepo;
+    private final Provider<PriceHistoryRepository> priceHistoryRepo;
     private final ContractFactory contractFactory;
 
 
     @Inject
-    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepository, ContractFactory contractFactory) {
-        this.timeSeriesRepository = timeSeriesRepository;
+    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepo, Provider<PriceHistoryRepository> priceHistoryRepo, ContractFactory contractFactory) {
+        this.timeSeriesRepo = timeSeriesRepo;
+        this.priceHistoryRepo = priceHistoryRepo;
         this.contractFactory = contractFactory;
     }
 
@@ -49,10 +51,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         if (connect()) {
             try {
                 switch (action) {
-                    //TODO add proper entry point
                     case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
                     case LATEST_WEEK -> saveLatestData(Duration.DAY_10);
-                    case HISTORICAL -> saveHistoricalDataRange("NQ", "202409", LocalDate.of(2024,9,21), 8);
+                    case HISTORICAL -> saveHistoricalDataRange("ES", "202406", LocalDate.of(2024, 6, 22), 8);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // unused
                 }
             } finally {
@@ -203,11 +204,6 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     public void saveHistoricalData(String symbol, String contractMonth, Duration duration) {
         var hdAction = getHistoricalData(symbol, contractMonth, duration);
         var result = processHistoricalData(hdAction, true);
-        PriceHistory ph = hdAction.asPriceHistory();
-        // trigger rebuild of index to include new rows if a partial day
-        if (result.documentsInserted < 1300) {
-            timeSeriesRepository.get().buildTradeDateIndex(ph.getSymbol());
-        }
     }
 
     private void getHistoricalIndexData(String symbol, Duration duration) {
@@ -291,35 +287,21 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         return action;
     }
 
-    private SaveResult processHistoricalData(HistoricalDataAction action, boolean fSave) {
+    private Path processHistoricalData(HistoricalDataAction action, boolean fSave) {
         var bars = action.getBars();
-        var contract = action.getContract();
         Path path = null;
-        int rowsInserted = 0;
-        log.info("processHistoricalData {} {}", bars.size(), contract.localSymbol());
+        log.info("processHistoricalData {} {}", bars.size(), action.getSymbol());
         if (!bars.isEmpty()) {
             log.info("bars from {} to {}", bars.getFirst().time(), bars.getLast().time());
 
             var history = action.asPriceHistory();
-            var rthBars = history.rthBars();
-            var sb = new StringBuilder();
-            sb.append("\n[yellow]--- RTH bars ---\n");
-            for (var bar : rthBars) {
-                sb.append(bar.asDailyBar()).append("\n");
-            }
-            sb.append("[/]");
-            print(sb);
-
             print(history.intradayPriceInfo(-1));
 
             if (fSave) {
-                var index = history.index();
-                path = action.save(index.entries().getFirst().tradeDate());
-                // update repository
-//                rowsInserted = timeSeriesRepository.get().append(history);
+                path = priceHistoryRepo.get().saveCsv(action.getSymbol(), history.indexEntry(0).tradeDate(), action.barsAsCsv());
             }
         }
-        return new SaveResult(path, rowsInserted);
+        return path;
     }
 
     private void processHistoricalIndexData(HistoricalDataAction action) {
@@ -329,7 +311,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         if (!bars.isEmpty()) {
             log.info(contract.symbol() + " bars from " + bars.getFirst().time() + " to " + bars.getLast().time());
             var history = action.asPriceHistory();
-            action.save(history.getDates()[0].toLocalDate());
+            priceHistoryRepo.get().saveCsv(action.getSymbol(), history.getDates()[0].toLocalDate(), action.barsAsCsv());
         }
     }
 
@@ -386,11 +368,6 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             String symbol,
             String contractMonth,  // only non‐null for futures
             String exchange        // only non‐null for indexes
-    ) {
-    }
-
-    public record SaveResult(
-            Path filepath,
-            int documentsInserted
     ) {}
+
 }

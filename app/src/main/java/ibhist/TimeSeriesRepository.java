@@ -8,7 +8,7 @@ public interface TimeSeriesRepository {
     long RTH_START_OFFSET = 930;
     long RTH_END_OFFSET = 1319;
 
-    void createM1TimeSeriesCollection(String collectionName, boolean dropExisting);
+    void createM1TimeSeriesCollection(String name, boolean dropExisting);
 
     void createMinVolTimeSeriesCollection(String name, boolean dropExisting);
 
@@ -18,19 +18,15 @@ public interface TimeSeriesRepository {
 
     void insertMinVol(PriceHistory history);
 
-    int append(PriceHistory history);
-
     /**
+     * Append to existing m1 timeseries removing existing rows with different volume
      *
-     * updates the minvol collection with new minvol data based on the last day in history.
-     * Used to keep an existing minvol collection upto date
      * @param history
-     * @return
      */
-    LocalDateTime updateMinvolForLastDay(PriceHistory history);
+    int appendM1(PriceHistory history);
 
     /**
-     * selectively rebuild the minvol collection for the interval of the price history
+     * selectively rebuild the minvol timeseries of a symbol from the beginning of the price history
      * @param history
      */
     LocalDateTime rebuildMinVol(PriceHistory history);
@@ -50,19 +46,17 @@ public interface TimeSeriesRepository {
     List<Summary> queryM1Summary();
 
     /**
-     * rebuild the trade_date_index collection based on m1 data
-     *
+     * build the trade_date_index collection based on m1 data for all symbols
      * @return list of symbols affected
      */
-    List<String> buildTradeDateIndex();
+    List<String> rebuildTradeDateIndex();
 
     /**
      * rebuild the trade_date_index for a single symbol based on m1 data
-     *
      * @param symbol symbol
      * @return a list of symbols affected
      */
-    List<String> buildTradeDateIndex(String symbol);
+    List<String> rebuildTradeDateIndex(String symbol);
 
     List<TradeDateIndexEntry> queryContiguousRegions(String symbol, int gapMins);
 
@@ -70,9 +64,21 @@ public interface TimeSeriesRepository {
 
     List<TimeSeriesRepositoryImpl.DayVolume> queryDaysWithVolume(String symbol, double minVol);
 
-    void buildAllDailyTimeSeries();
+    /**
+     * Build daily and dailyRTH time series from the m1 data for all symbols
+     */
+    void buildAllDaily();
 
-    void buildDailyTimeSeries(String symbol);
+    /**
+     * Rebuilds m1, trade-date-index, min-vol and daily timeseries for the symbol and time period
+     * @param history
+     */
+    void selectiveRebuild(PriceHistory history);
+
+    /**
+     * Selectively update daily and dailyRTH time series from the m1 data for all trade dates in the price history
+     */
+    void rebuildDaily(PriceHistory history);
 
     List<DailyBar> queryDailyBars(String symbol, boolean rth);
 

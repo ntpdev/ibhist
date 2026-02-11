@@ -42,3 +42,6 @@ docker exec -it mongo mongosh
 use futures
 show collections
 db.daily.find({symbol:"esh6"}).sort({tradeDate:-1}).limit(5)
+
+## remove file nul if accidentally created by a tool
+Remove-Item -LiteralPath "\\?\$($pwd.Path)\nul" -Force

@@ -7,7 +7,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -80,7 +79,7 @@ class HistoricalDataActionTest {
         var contract = new Contract();
         contract.symbol("ES");
         var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, null, Duration.DAY_1, false, new MonitorManager());
-        var repo = new PriceHistoryRepository();
+        var repo = new PriceHistoryRepositoryImpl();
         var history = repo.load("esu").get();
         var idx = history.indexEntry(LocalDate.of(2025, 6, 18));
         var open = history.getColumn("open");
@@ -113,7 +112,7 @@ class HistoricalDataActionTest {
         var contract = new Contract();
         contract.symbol("ES");
         var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, null, Duration.DAY_1, true, monitorManager);
-        var repo = new PriceHistoryRepository();
+        var repo = new PriceHistoryRepositoryImpl();
         var history = repo.load("esu5").get();
         var idx = history.indexEntry(LocalDate.of(2025, 6, 18));
         var open = history.getColumn("open");

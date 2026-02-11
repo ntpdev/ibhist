@@ -1,6 +1,5 @@
 package ibhist;
 
-import com.google.common.base.Suppliers;
 import com.google.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -8,7 +7,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -18,7 +16,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.function.Supplier;
 
 import static ibhist.StringUtils.print;
 
@@ -26,16 +23,16 @@ public class ReplImpl implements Repl {
     private static final Logger log = LogManager.getLogger(ReplImpl.class.getSimpleName());
     private static final DateTimeFormatter tradeDateformatter = DateTimeFormatter.ofPattern("EEE d MMMM");
     private final IBConnector connector;
-    private final TimeSeriesRepository tsRepository;
-//    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(() -> new PriceHistoryRepository(Path.of("c:\\temp\\ultra"), ".csv"));
-    private final Supplier<PriceHistoryRepository> repository = Suppliers.memoize(PriceHistoryRepository::new);
+    private final TimeSeriesRepository timeSeriesRepo;
+    private final PriceHistoryRepository priceHistoryRepo;
     private PriceHistory history = null;
 
 
     @Inject
-    public ReplImpl(IBConnector connector, TimeSeriesRepository repository) {
+    public ReplImpl(IBConnector connector, TimeSeriesRepository timeSeriesRepo, PriceHistoryRepository priceHistoryRepo) {
         this.connector = connector;
-        this.tsRepository = repository;
+        this.timeSeriesRepo = timeSeriesRepo;
+        this.priceHistoryRepo = priceHistoryRepo;
     }
 
     public void run() {
@@ -50,15 +47,15 @@ public class ReplImpl implements Repl {
     void runImpl() throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         print("""
-[yellow]enter command
-x| load sym | info n | ib | p n | minmax n=15
-x - exit
-load zesh6
-info index-entry
-p n - print first or last n bars or bars at time hh:mm
-conn tws / disc tws - connect disconnect from TWS
-show es - fetch hist data from ib and update mdb
-stream es - start historical streaming data[/]""");
+                [yellow]enter command
+                x| load sym | info n | ib | p n | minmax n=15
+                x - exit
+                load zesh6
+                info index-entry
+                p n - print first or last n bars or bars at time hh:mm
+                conn tws / disc tws - connect disconnect from TWS
+                show es - fetch hist data from ib and update mdb
+                stream es - start historical streaming data[/]""");
         String line;
         MonitorManager monitorManager = new MonitorManager();
         while ((line = reader.readLine()) != null) {
@@ -87,9 +84,7 @@ stream es - start historical streaming data[/]""");
                 } else if (cmd.equals("p") && history != null) {
                     // param 1 = offset, -offset, hh:mm
                     if (noun.contains(":")) {
-                        PriceHistory.Index index = history.index();
-                        var entries = index.entries();
-                        tryParseTime(noun, entries.getLast().tradeDate()).ifPresent(barTime -> {
+                        tryParseTime(noun, history.indexEntry(-1).tradeDate()).ifPresent(barTime -> {
                             int i = history.find(barTime);
                             if (i > 0) {
                                 printHistory(i - 9, i + 10);
@@ -126,11 +121,9 @@ stream es - start historical streaming data[/]""");
                 history = action.asPriceHistory();
                 print(history.toString());
                 print(history.intradayPriceInfo(-1));
-                var path = action.save(history.indexEntry(0).tradeDate());
+                priceHistoryRepo.saveCsv(action.getSymbol(), history.indexEntry(0).tradeDate(), action.barsAsCsv());
                 history.addStandardColumns();
-                tsRepository.append(history);
-                tsRepository.buildTradeDateIndex(history.getSymbol());
-                tsRepository.updateMinvolForLastDay(history);
+                timeSeriesRepo.selectiveRebuild(history);
                 yield true;
             }
             case "stream" -> {
@@ -144,7 +137,7 @@ stream es - start historical streaming data[/]""");
                             var action = connector.waitForHistoricalData();
                             history = action.asPriceHistory();
                             print(history.toString());
-                            var path = action.save(history.indexEntry(0).tradeDate());
+                            priceHistoryRepo.saveCsv(action.getSymbol(), history.indexEntry(0).tradeDate(), action.barsAsCsv());
                         });
                 yield true;
             }
@@ -226,7 +219,7 @@ stream es - start historical streaming data[/]""");
     }
 
     void load(String s) {
-        var optH = repository.get().load(s, false, true);
+        var optH = priceHistoryRepo.load(s, false, true);
         if (optH.isEmpty()) return;
         history = optH.get();
         StringBuilder sb = new StringBuilder();

@@ -63,7 +63,7 @@ public class App {
             }
             default -> {
                 log.error("Unknown command: '{}'.", command);
-                System.err.println("Usage: java ibhist.App [hist|day|rt|repl]");
+                System.err.println("Usage: java ibhist.App [hist|day|rt|week|repl]");
                 System.exit(1);
             }
         }

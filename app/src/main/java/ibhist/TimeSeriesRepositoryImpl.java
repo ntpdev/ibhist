@@ -136,7 +136,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     @Override
     public void insertM1(PriceHistory history) {
         log.info("from {}", history);
-        var imr = insert(getCollection(M1_COLLECTION), history);
+        var imr = insertM1(getCollection(M1_COLLECTION), history);
         log.info("inserted {} documents into m1", getNumberInserted(imr));
     }
 
@@ -148,19 +148,14 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
 
-    /**
-     * Append to existing time series collection removing existing rows with different volume
-     *
-     * @param history
-     */
     @Override
-    public int append(PriceHistory history) {
+    public int appendM1(PriceHistory history) {
         try {
             log.info("inserting into mongodb.futures.m1 {}", history);
             var collection = getCollection(M1_COLLECTION);
             LocalDateTime last = removeExistingWithDifferentVol(collection, history);
             log.info("inserting rows after {}", last);
-            var imr = insert(collection, history, last);
+            var imr = insertM1(collection, history, last);
             log.info("inserted documents {}", getNumberInserted(imr));
             return getNumberInserted(imr);
         } catch (MongoTimeoutException e) {
@@ -189,30 +184,30 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return dt;
     }
 
-    @Override
-    public LocalDateTime updateMinvolForLastDay(PriceHistory history) {
-        var idx = history.index().indexEntries.getLast();
-        LocalDateTime firstBar = history.dates[idx.start()];
-        var collection = getCollection(MIN_VOL_COLLECTION);
-        String symbol = history.getSymbol();
-        log.info("from {}", history);
-        var idr = deleteMinVolAfter(collection, symbol, firstBar);
-        log.info("deleted {} documents for symbol {} after start_tm {} from minvol ", idr.getDeletedCount(), symbol, firstBar);
-        var minvolBars = history.minVolBars(2500);
-        for (int i = minvolBars.size() - 1; i >= 0; i--) {
-            if (minvolBars.get(i).start().equals(firstBar)) {
-                var sublist = minvolBars.subList(i, minvolBars.size());
-                var imr = insertMinVol(collection, symbol, sublist);
-                log.info("inserted {} documents into minvol", imr.getInsertedIds().size());
-                return firstBar;
-            }
-        }
-        throw new RuntimeException("no minvol found");
-    }
+//    @Override
+//    public LocalDateTime updateMinvolForLastDay(PriceHistory history) {
+//        var idx = history.indexEntry(0);
+//        LocalDateTime firstBar = history.dates[idx.start()];
+//        var collection = getCollection(MIN_VOL_COLLECTION);
+//        String symbol = history.getSymbol();
+//        log.info("from {}", history);
+//        var idr = deleteMinVolAfter(collection, symbol, firstBar);
+//        log.info("deleted {} documents for symbol {} after start_tm {} from minvol ", idr.getDeletedCount(), symbol, firstBar);
+//        var minvolBars = history.minVolBars(2500);
+//        for (int i = minvolBars.size() - 1; i >= 0; i--) {
+//            if (minvolBars.get(i).start().equals(firstBar)) {
+//                var sublist = minvolBars.subList(i, minvolBars.size());
+//                var imr = insertMinVol(collection, symbol, sublist);
+//                log.info("inserted {} documents into minvol", imr.getInsertedIds().size());
+//                return firstBar;
+//            }
+//        }
+//        throw new RuntimeException("no minvol found");
+//    }
 
     @Override
     public LocalDateTime rebuildMinVol(PriceHistory history) {
-        var idx = history.index().indexEntries.getFirst();
+        var idx = history.indexEntry(0);
         LocalDateTime firstBar = history.dates[idx.start()];
         var collection = getCollection(MIN_VOL_COLLECTION);
         String symbol = history.getSymbol();
@@ -287,11 +282,11 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return history;
     }
 
-    private Optional<InsertManyResult> insert(MongoCollection<Document> m1, PriceHistory history) {
-        return insert(m1, history, null);
+    private Optional<InsertManyResult> insertM1(MongoCollection<Document> m1, PriceHistory history) {
+        return insertM1(m1, history, null);
     }
 
-    private Optional<InsertManyResult> insert(MongoCollection<Document> m1, PriceHistory history, LocalDateTime lastExisting) {
+    private Optional<InsertManyResult> insertM1(MongoCollection<Document> m1, PriceHistory history, LocalDateTime lastExisting) {
         LocalDateTime[] dates = history.dates;
         double[] opens = history.getColumn("open");
         double[] highs = history.getColumn("high");
@@ -311,8 +306,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         .append("low", lows[i])
                         .append("close", closes[i])
                         .append("volume", volumes[i])
-                        .append("ema", BigDecimal.valueOf(emas[i]).setScale(3, RoundingMode.HALF_UP).doubleValue())
-                        .append("vwap", BigDecimal.valueOf(vwaps[i]).setScale(3, RoundingMode.HALF_UP).doubleValue());
+                        .append("ema", roundDouble(emas[i]))
+                        .append("vwap", roundDouble(vwaps[i]));
                 rows.add(d);
             }
         }
@@ -352,8 +347,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                 .append("low", b.low())
                 .append("close", b.close())
                 .append("volume", b.volume())
-                .append("vwap", BigDecimal.valueOf(b.vwap()).setScale(3, RoundingMode.HALF_UP).doubleValue())
-                .append("ema", BigDecimal.valueOf(b.ema()).setScale(3, RoundingMode.HALF_UP).doubleValue());
+                .append("vwap", roundDouble(b.vwap()))
+                .append("ema", roundDouble(b.ema()));
         return d;
     }
 
@@ -413,7 +408,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     @Override
-    public List<String> buildTradeDateIndex() {
+    public List<String> rebuildTradeDateIndex() {
         createDailyTimeSeriesCollection(TRADE_DATE_INDEX_COLLECTION, true);
         var map = new HashMap<String, List<TradeDateIndexEntry>>();
         var symbols = queryM1Summary().stream().map(Summary::symbol).toList();   // get list of symbols in m1
@@ -427,7 +422,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     }
 
     @Override
-    public List<String> buildTradeDateIndex(String symbol) {
+    public List<String> rebuildTradeDateIndex(String symbol) {
         log.info("buildTradeDateIndex symbol {}", symbol);
         var result = getCollection(TRADE_DATE_INDEX_COLLECTION).deleteMany(Filters.eq("symbol", symbol));
         log.info("deleted {} rows for symbol {} from trade_date_index", result.getDeletedCount(), symbol);
@@ -436,7 +431,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return List.of(symbol);
     }
 
-    public static final String CONTINUOUS_BARS_PIPELINE = """
+    public static final String CONTIGUOUS_BARS_PIPELINE = """
                 [
                     {"$match": {"symbol": "%s"}},
                     {"$sort": {"timestamp": 1}},
@@ -480,7 +475,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
     public List<TradeDateIndexEntry> queryContiguousRegions(String symbol, int gapMins) {
 
-        String pipelineJson = CONTINUOUS_BARS_PIPELINE.formatted(symbol.toLowerCase(), gapMins);
+        String pipelineJson = CONTIGUOUS_BARS_PIPELINE.formatted(symbol.toLowerCase(), gapMins);
 
         @SuppressWarnings("unchecked")
         var pipeline = (List<Document>) Document.parse("{ \"pipeline\": " + pipelineJson + " }").get("pipeline");
@@ -495,13 +490,22 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                 .toList();
     }
 
-    private static Date toDate(LocalDateTime ldt) {
+    static Date toMongoDate(LocalDateTime ldt) {
         return ldt == null || ldt.equals(LocalDateTime.MIN)
                 ? null
                 : Date.from(ldt.toInstant(UTC));
     }
 
-    private static Instant toInstant(LocalDateTime ldt) {
+    static Date toMongoDate(LocalDate ld) {
+        return ld == null || ld.equals(LocalDate.MIN)
+                ? null
+                : Date.from(ld.atStartOfDay().toInstant(UTC));
+    }
+        static double roundDouble(double value) {
+        return BigDecimal.valueOf(value).setScale(3, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    static Instant toInstant(LocalDateTime ldt) {
         return ldt.toInstant(UTC);
     }
 
@@ -522,14 +526,16 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             for (TradeDateIndexEntry e : rows) {
                 Document doc = new Document()
                         .append("symbol", symbol)
-                        .append("date", toDate(e.date().atStartOfDay()))
-                        .append("start", toDate(e.start()))
-                        .append("end", toDate(e.end()))
+                        .append("date", toMongoDate(e.date()))
+                        .append("start", toMongoDate(e.start()))
+                        .append("end", toMongoDate(e.end()))
                         .append("volume", e.volume())
-                        .append("bars", e.bars())
-                        .append("rthStart", toDate(e.rthStart()))
-                        .append("rthEnd", toDate(e.rthEnd()));
-
+                        .append("bars", e.bars());
+                Date rthStart = toMongoDate(e.rthStart());
+                if (rthStart != null) {
+                    doc.append("rthStart", rthStart)
+                       .append("rthEnd", toMongoDate(e.rthEnd()));
+                }
                 docs.add(doc);
             }
 
@@ -660,6 +666,10 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
      */
     public List<DailyBar> aggregateDailyBars(String symbol, boolean useRth) {
         List<TradeDateIndexEntry> tradeDates = queryTradeDates(symbol, 100_000);
+        return aggregateDailyBars(symbol, useRth, tradeDates);
+    }
+
+    List<DailyBar> aggregateDailyBars(String symbol, boolean useRth, List<TradeDateIndexEntry> tradeDates) {
         List<DailyBar> dailyBars = new ArrayList<>();
 
         for (TradeDateIndexEntry td : tradeDates) {
@@ -673,6 +683,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                 continue;
             }
 
+            log.info("{} {} {} {}", symbol, td.date(), start, end);
             var bar = aggregateSingleDay(symbol, td.date(), start, end);
             if (bar != null) {
                 dailyBars.add(bar);
@@ -730,31 +741,24 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
     /**
      * Insert daily bars into the specified collection.
      */
-    public void insertDailyBars(String collectionName, String symbol, List<DailyBar> bars) {
-        if (bars.isEmpty()) {
-            log.info("No bars to insert into {}", collectionName);
-            return;
-        }
-
-        var collection = getCollection(collectionName);
+    InsertManyResult insertDailyBars(String symbol, boolean useRth, List<DailyBar> bars) {
+        var collection = getCollection(useRth ? DAILY_RTH_COLLECTION : DAILY_COLLECTION);
         List<Document> docs = new ArrayList<>(bars.size());
 
         for (DailyBar bar : bars) {
-            Document doc = new Document()
+            var doc = new Document()
                     .append("symbol", symbol)
-                    .append("date", toDate(bar.date().atStartOfDay()))
+                    .append("date", toMongoDate(bar.date()))
                     .append("open", bar.open())
                     .append("high", bar.high())
                     .append("low", bar.low())
                     .append("close", bar.close())
                     .append("volume", bar.volume())
-                    .append("vwap", BigDecimal.valueOf(bar.vwap())
-                            .setScale(3, RoundingMode.HALF_UP).doubleValue());
+                    .append("vwap", roundDouble(bar.vwap()));
             docs.add(doc);
         }
 
-        var result = collection.insertMany(docs, new InsertManyOptions().ordered(false));
-        log.info("Inserted {} daily bars into {}", result.getInsertedIds().size(), collectionName);
+        return collection.insertMany(docs, new InsertManyOptions().ordered(false));
     }
 
     /**
@@ -762,14 +766,12 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
      */
     public void buildDailyTimeSeries(String symbol) {
         log.info("Building daily time series for {}", symbol);
-        insertDailyBars(DAILY_COLLECTION, symbol, aggregateDailyBars(symbol, false));
-        insertDailyBars(DAILY_RTH_COLLECTION, symbol, aggregateDailyBars(symbol, true));
+        insertDailyBars(symbol, false, aggregateDailyBars(symbol, false));
+        insertDailyBars(symbol, true, aggregateDailyBars(symbol, true));
     }
 
-    /**
-     * Build daily time series for all symbols in the date index.
-     */
-    public void buildAllDailyTimeSeries() {
+
+    public void buildAllDaily() {
         createDailyTimeSeriesCollection(DAILY_COLLECTION, true);
         createDailyTimeSeriesCollection(DAILY_RTH_COLLECTION, true);
 
@@ -778,6 +780,43 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             buildDailyTimeSeries(summary.symbol());
         }
         log.info("Completed building daily time series for {} symbols", summaries.size());
+    }
+
+    @Override
+    public void selectiveRebuild(PriceHistory history) {
+        appendM1(history);
+        rebuildTradeDateIndex(history.getSymbol());
+        rebuildMinVol(history);
+        rebuildDaily(history);
+    }
+
+    @Override
+    public void rebuildDaily(PriceHistory history) {
+        String symbol = history.getSymbol();
+        var dates = history.index().entries().stream().map(PriceHistory.IndexEntry::tradeDate).toList();
+        for (var rthOnly: List.of(false, true)) {
+            var idr = deleteDailyAfter(symbol, rthOnly, dates.getFirst());
+            log.info("deleted {} documents for symbol {} from date {} from daily", idr.getDeletedCount(), symbol, dates.getFirst());
+
+            var datesToRebuild = queryTradeDates(symbol, 0).stream().filter(e -> dates.contains(e.date())).toList();
+            var bars = aggregateDailyBars(symbol, rthOnly, datesToRebuild);
+            if (!bars.isEmpty()) {
+                var imr = insertDailyBars(symbol, rthOnly, bars);
+                log.info("inserted {} documents into daily", imr.getInsertedIds().size());
+            }
+        }
+    }
+
+    /**
+     * Delete all rows on or after given timestamp
+     */
+    private DeleteResult deleteDailyAfter(String symbol, boolean useRth, LocalDate dateInclusive) {
+        MongoCollection<Document> coll = getCollection(useRth ? DAILY_RTH_COLLECTION : DAILY_COLLECTION);
+        var filter = Filters.and(
+                Filters.gte("date", dateInclusive),
+                Filters.eq("symbol", symbol)
+        );
+        return coll.deleteMany(filter);
     }
 
     /**
@@ -822,8 +861,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
 
         var filter = Filters.and(
                 Filters.eq("symbol", symbol.toLowerCase()),
-                Filters.gte("date", toDate(startDt.atStartOfDay())),
-                Filters.lte("date", toDate(endDt.atStartOfDay()))
+                Filters.gte("date", toMongoDate(startDt)),
+                Filters.lte("date", toMongoDate(endDt))
         );
 
         var results = collection

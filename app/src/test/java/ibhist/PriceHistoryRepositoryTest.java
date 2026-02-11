@@ -1,7 +1,5 @@
 package ibhist;
 
-import com.ib.client.Bar;
-import com.ib.client.Decimal;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
@@ -48,31 +46,32 @@ class PriceHistoryRepositoryTest {
     }
 
     @Test
-    void test_findAllSymbols() {
-        var repo = new PriceHistoryRepository();
-        var xs = repo.findAllSymbols();
+    void test_findAllFuturesSymbols() {
+        var repo = new PriceHistoryRepositoryImpl();
+        var xs = repo.findAllFuturesSymbols();
         assertThat(xs).contains("esh5", "esm5", "esu5", "esz5", "esh6", "nqh6");
     }
 
     @Test
-    void test_findAllCsvFiles() {
-        var repo = new PriceHistoryRepository();
-        var xs = repo.findAllCsvFiles();
+    void test_findAllDataFiles() {
+        var repo = new PriceHistoryRepositoryImpl();
+        var xs = repo.findAllDataFiles();
         assertThat(xs.size()).isGreaterThan(8);
     }
 
     @Test
-    void test_findSymbolFiles() {
-        var repo = new PriceHistoryRepository();
-        var xs = repo.findSymbolFiles("esh6");
-        repo.load("esh6");
+    void test_findAllDataFiles_for_symbol() {
+        var repo = new PriceHistoryRepositoryImpl();
+        var xs = repo.findAllDataFiles("esh6");
         assertThat(xs.size()).isGreaterThan(1);
+        var history = repo.load("esh6");
+        assertThat(history.isEmpty()).isFalse();
     }
 
 
     @Test
     void test_load_arbitrary_file() {
-        var repo = new PriceHistoryRepository();
+        var repo = new PriceHistoryRepositoryImpl();
         var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260206.csv"));
         hist.addStandardColumns();
         log.info(hist);
@@ -153,7 +152,7 @@ class PriceHistoryRepositoryTest {
     }
 
     private static PriceHistory getPriceHistory() {
-        var repository = new PriceHistoryRepository();
+        var repository = new PriceHistoryRepositoryImpl();
         return repository.load("esz4").get();
     }
 

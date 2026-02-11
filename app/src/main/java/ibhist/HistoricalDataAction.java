@@ -2,10 +2,6 @@ package ibhist;
 
 import com.ib.client.*;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -59,6 +55,7 @@ public class HistoricalDataAction extends ActionBase {
         if (endDate != null) {
             var d = endDate.atTime(22, 59);
             upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss"));
+            upTo = upTo + " Europe/London"; // ask for local time. the option is to use exchange tz from contractDetails
         }
 //        var d = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusMinutes(1);
 //        var upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss")); 20231001 22:00:00
@@ -79,8 +76,9 @@ public class HistoricalDataAction extends ActionBase {
     }
 
     public void onHistoricalDataEnd() {
-        // marks end of historic data. if keepUpToDate=true future updates will be streamed
-        // via processUpdate so this will not be the end
+        // marks end of historic data.
+        // if keepUpToDate=true future updates will be streamed via processUpdate
+        // so this will not be the last call
         if (!keepUpToDate) {
             complete();
         }
@@ -128,39 +126,6 @@ public class HistoricalDataAction extends ActionBase {
             monitors.add(new PriceMonitor(data, this::eventHandler));
         }
     }
-//        log.info(barToCsv(n, bars.get(n)));
-//        log.info(barToCsv(n+1, bars.get(n+1)));
-//        var history = asPriceHistory();
-//        var dt = history.getDates()[history.length() - 1];
-//        var barTime = parseTime(bar);
-//        if (dt.isEqual(barTime)) {
-//            history.replace(-1, barTime, bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
-//        } else {
-//            //TODO calc vwap. saving to mongo requires vwap calc
-//            history.add(barTime, bar.open(), bar.high(), bar.low(), bar.close(), bar.volume().longValue());
-//            history.recalc(10);
-//            log.info(history.info());
-//            ++rtBarCount;
-//            if (rtBarCount > 9) {
-//                cancel();
-//            }
-//        }
-//
-//        //
-//        int live = history.length() - 1;
-//        int sz = 5;
-//        var bar2 = history.aggregrate(live - 2 * sz, live - sz - 1);
-//        var bar1 = history.aggregrate(live - sz, live - 1);
-//        if (bar1.low() < bar2.low()) { // 2 down
-//            String s = "2 down - long entry trigger over %f low %f".formatted(bar1.high(), bar1.low());
-//            if (!s.equals(lastMsg)) {
-//                log.info(s);
-//                lastMsg = s;
-//            }
-//            if (bar.close() > bar1.high())
-//                log.info("triggered " + history.bar(history.length() - 1));
-//        }
-//        bars.add(bar);
 
     public PriceHistory asPriceHistory() {
         if (hist == null) {
@@ -175,7 +140,7 @@ public class HistoricalDataAction extends ActionBase {
         return hist;
     }
 
-    private String getSymbol() {
+    public String getSymbol() {
         return contract.localSymbol() == null ? contract.symbol() : contract.localSymbol();
     }
 
@@ -194,22 +159,6 @@ public class HistoricalDataAction extends ActionBase {
             xs.append(barToCsv(c++, bar)).append(System.lineSeparator());
         }
         return xs.toString();
-    }
-
-    public Path save(LocalDate startDate) {
-        //TODO: could move to PriceHistoryRepository and have that injected but then PHR would need
-        // to be a guice class and Action as well with a custom factory
-        try {
-            String fname = "z%s %s.csv".formatted(getSymbol(), startDate.format(DateTimeFormatter.BASIC_ISO_DATE));
-            var p = Path.of(System.getProperty("user.home"), "Documents", "data", fname);
-            //Path.of("c:\\temp\\ultra\\", fname);
-            log.info("saving file " + p);
-            Files.writeString(p, barsAsCsv());
-            return p;
-        } catch (IOException e) {
-            log.error(e);
-            throw new RuntimeException("error saving historical data", e);
-        }
     }
 
     private void eventHandler(PriceEvent event) {

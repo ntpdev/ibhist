@@ -6,10 +6,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +38,7 @@ class TimeSeriesRepositoryImplTest {
 
     @Test
     void test_buildIndex() {
-        var symbols = repository.buildTradeDateIndex();
+        var symbols = repository.rebuildTradeDateIndex();
         log.info("rebuild trade_date_index for {} symbols", symbols.size());
     }
 
@@ -53,7 +51,7 @@ class TimeSeriesRepositoryImplTest {
 
     @Test
     void test_buildDailyBars() {
-        repository.buildAllDailyTimeSeries();
+        repository.buildAllDaily();
     }
 
     @Test
@@ -75,32 +73,32 @@ class TimeSeriesRepositoryImplTest {
     }
 
     @Test
-    void test_newCollectionLoadAll() {
-        var phr = new PriceHistoryRepository();
-        var xs = phr.findAllSymbols();
-        repository.createM1TimeSeriesCollection("m1", true);
-        repository.createMinVolTimeSeriesCollection("min_vol", true);
-        xs.stream().map(phr::load).filter(Optional::isPresent).map(Optional::get).forEach(
-                h -> {
-                    // add vwap and ema indicators to history and insert into m1 and optionally min_vol collections
-                    h.vwap("vwap");
-                    h.columns.add(h.ema("close", "ema", 87));
-                    h.dailyBars();
-                    repository.insertM1(h);
-                    if (h.getSymbol().startsWith("es")) {
-                        repository.insertMinVol(h);
-                    }
-                });
+    void test_reload_futures_data() {
+        var phr = new PriceHistoryRepositoryImpl();
+        var symbols = phr.findAllFuturesSymbols().stream()
+                .filter(s -> s.startsWith("es") || s.startsWith("nq"))
+                .toList();
+        if (!symbols.isEmpty()) {
+            repository.createM1TimeSeriesCollection("m1", true);
+            repository.createMinVolTimeSeriesCollection("min_vol", true);
+            symbols.stream().map(phr::load).filter(Optional::isPresent).map(Optional::get).forEach(h -> {
+                        repository.insertM1(h);
+                        if (h.getSymbol().startsWith("es")) {
+                            repository.insertMinVol(h);
+                        }
+                    });
+            repository.rebuildTradeDateIndex();
+            repository.buildAllDaily();
+        }
     }
 
     @Test
-    void test_load_min_vol() {
-        var repo = new PriceHistoryRepository();
-        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260206.csv"));
+    void test_selectiveRebuild() {
+        var repo = new PriceHistoryRepositoryImpl();
+        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "ESH6 20260209.csv"));
         hist.addStandardColumns();
         log.info(hist);
-        repository.createMinVolTimeSeriesCollection("min_vol", true);
-        repository.insertMinVol(hist);
+        repository.selectiveRebuild(hist);
     }
 
     @Test
@@ -108,5 +106,13 @@ class TimeSeriesRepositoryImplTest {
         // rebuild last 5 days of minvol from m1
         var hist = repository.loadPriceHistory("esh6", -5, 5);
         repository.rebuildMinVol(hist);
+        repository.insertMinVol(hist);
+    }
+
+    @Test
+    void test_rebuild_daily_bars() {
+        var repo = new PriceHistoryRepositoryImpl();
+        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260210.csv"));
+        repository.rebuildDaily(hist);
     }
 }
