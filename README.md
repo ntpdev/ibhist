@@ -9,6 +9,7 @@
 gradle run
 gradle run --args repl
 gradle installDist
+gradle test --tests "ibhist.TimeSeriesRepositoryImplTest.test_selectiveRebuild"
 
 ```powershell
 param(

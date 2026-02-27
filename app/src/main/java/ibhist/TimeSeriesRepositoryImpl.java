@@ -286,7 +286,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return insertM1(m1, history, null);
     }
 
-    private Optional<InsertManyResult> insertM1(MongoCollection<Document> m1, PriceHistory history, LocalDateTime lastExisting) {
+    private Optional<InsertManyResult> insertM1(MongoCollection<Document> m1, PriceHistory history, @Nullable LocalDateTime lastExisting) {
         LocalDateTime[] dates = history.dates;
         double[] opens = history.getColumn("open");
         double[] highs = history.getColumn("high");
@@ -297,10 +297,23 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         double[] emas = history.getColumn("ema");
         List<Document> rows = new ArrayList<>(dates.length);
         int start = lastExisting == null ? 0 : Math.max(0, history.find(lastExisting));
+        int idx = 0;
         for (int i = start; i < history.length(); i++) {
+
             if (lastExisting == null || dates[i].isAfter(lastExisting)) {
+                // advance session if needed
+                var current = history.indexEntry(idx);
+                while (i > current.end() && idx < history.indexSize() - 1) {
+                    idx++;
+                    current = history.indexEntry(idx);
+                }
+
+                int barNumber = i - current.start();
+
                 var d = new Document("symbol", history.getSymbol())
                         .append("timestamp", dates[i])
+                        .append("trade_date", current.tradeDate())
+                        .append("bar_number", barNumber)
                         .append("open", opens[i])
                         .append("high", highs[i])
                         .append("low", lows[i])
@@ -308,6 +321,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         .append("volume", volumes[i])
                         .append("ema", roundDouble(emas[i]))
                         .append("vwap", roundDouble(vwaps[i]));
+
                 rows.add(d);
             }
         }

@@ -66,13 +66,15 @@ class PriceHistoryRepositoryTest {
         assertThat(xs.size()).isGreaterThan(1);
         var history = repo.load("esh6");
         assertThat(history.isEmpty()).isFalse();
+        var c = history.get().barIndex("bi");
+        var cummvol = history.get().cumulative("volume", "cummvol", c);
     }
 
 
     @Test
     void test_load_arbitrary_file() {
         var repo = new PriceHistoryRepositoryImpl();
-        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260206.csv"));
+        var hist = repo.load("esh6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260211.csv"));
         hist.addStandardColumns();
         log.info(hist);
         log.info(hist.index().makeMessagesMap(-1));

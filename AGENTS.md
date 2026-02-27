@@ -33,7 +33,7 @@ The main data structure is PriceHistory.java which holds timeseries data as colu
 | `./gradlew installDist` | Create install distribution |
 
 ## Directory Structure
-
+A standard gradle Java application directory structure.
 ```
 c:/code/ibhist/
 ├── app/
@@ -123,12 +123,12 @@ c:/code/ibhist/
 
 ## MongoDB Collections
 
-| Collection | timeField | metaField | Granularity | Description |
-|------------|-----------|-----------|-------------|-------------|
-| `m1` | `timestamp` | `symbol` | minutes | Source of truth. 1-min OHLCV bars. |
-| `tradeDate` | `tradeDate` | `symbol` | hours | Trading session index with RTH bounds. |
-| `daily` | `tradeDate` | `symbol` | hours | Daily OHLCV (full session). |
-| `dailyRth` | `tradeDate` | `symbol` | hours | Daily OHLCV (RTH only). |
+| Collection             | timeField   | metaField | Granularity | Description |
+|------------------------|-------------|-----------|-------------|-------------|
+| `m1`                   | `timestamp` | `symbol` | minutes | Source of truth. 1-min OHLCV bars. |
+| `trade_date_index` | `date`      | `symbol` | hours | Trading session index with RTH bounds. |
+| `daily`                | `date`      | `symbol` | hours | Daily OHLCV (full session). |
+| `dailyRth`             | `date`      | `symbol` | hours | Daily OHLCV (RTH only). |
 
 **Symbols**: Lowercase. Futures use CME notation: `esz5` = ES Dec 2025 (`z`=Dec, `5`=2025). Month codes: F=Jan, G=Feb, H=Mar, J=Apr, K=May, M=Jun, N=Jul, Q=Aug, U=Sep, V=Oct, X=Nov, Z=Dec.
 

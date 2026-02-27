@@ -186,11 +186,15 @@ public class PriceHistory implements Serializable {
         return c;
     }
 
-    Column cumulative(String a, String output) {
+    Column cumulative(String a, String output, Column barIndex) {
         var as = getColumn(a);
         var c = newColumn(output);
+        var bari = barIndex.values;
         double cumulative = 0;
         for (int i = 0; i < length(); i++) {
+            if (bari[i] % 10_000 == 0) {
+                cumulative = 0;
+            }
             cumulative += as[i];
             c.values[i] = cumulative;
         }
@@ -247,6 +251,28 @@ public class PriceHistory implements Serializable {
             lastDt = dates[i];
         }
         columns.add(c);
+        return c;
+    }
+
+    /**
+     * bar index - uniquely identifies each bar by the trade date and offset from start of day
+     * @param name
+     * @return
+     */
+    public Column barIndex(String name) {
+        var c = newColumn(name);
+        var xs = c.values;
+        int idx = 0;
+        int n = 0;
+
+        for (int i = 0; i < length(); i++) {
+            xs[i] = idx * 10_000 + n;
+            ++n;
+            if (i >= indexEntry(idx).end()) {
+                ++idx;
+                n = 0;
+            }
+        }
         return c;
     }
 
@@ -329,6 +355,12 @@ public class PriceHistory implements Serializable {
         }
     }
 
+    /**
+     * classifies a bar based on high/low compared to prior bar.
+     * 0 inside; 1 higher high; 2 lower low; 3 outside;
+     * @param name
+     * @return the column
+     */
     public Column strat(String name) {
         var c = newColumn(name);
         columns.add(c);
@@ -557,6 +589,10 @@ public class PriceHistory implements Serializable {
             }
         }
         return null;
+    }
+
+    public int indexSize() {
+        return index().entries().size();
     }
 
     List<Bar> dailyBars() {

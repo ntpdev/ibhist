@@ -95,7 +95,7 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_selectiveRebuild() {
         var repo = new PriceHistoryRepositoryImpl();
-        var hist = repo.load("ESH6", Paths.get(System.getProperty("user.home"), "Documents", "data", "ESH6 20260209.csv"));
+        var hist = repo.load("esh6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260211.csv"));
         hist.addStandardColumns();
         log.info(hist);
         repository.selectiveRebuild(hist);

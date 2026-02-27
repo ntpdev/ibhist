@@ -23,7 +23,6 @@ import static ibhist.StringUtils.print;
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
     public static final String CONTRACT_MONTH = "202603";
-    //    public static final String CONTRACT_MONTH = "202503";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -53,7 +52,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 switch (action) {
                     case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
                     case LATEST_WEEK -> saveLatestData(Duration.DAY_10);
-                    case HISTORICAL -> saveHistoricalDataRange("ES", "202406", LocalDate.of(2024, 6, 22), 8);
+                    case HISTORICAL -> saveHistoricalDataRange("ES", "202312", LocalDate.of(2023, 12, 16), 8);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // unused
                 }
             } finally {
@@ -154,7 +153,11 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     //    @SuppressWarnings("unchecked");
     private <T extends Action> T takeFromQueue(T action) {
         Class<T> c = (Class<T>) action.getClass();
-        return takeFromQueue(c);
+        T t;
+        while ((t =  takeFromQueue(c)).getRequestId() != action.getRequestId()) {
+            log.info("discarding action " + t);
+        }
+        return t;
     }
 
     void connectionThread() {
