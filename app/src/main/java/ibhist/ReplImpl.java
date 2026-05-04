@@ -73,8 +73,8 @@ public class ReplImpl implements Repl {
                     info(parseInt(noun, -1));
                 } else if (noun.equals("tws")) { // conn disc
                     processTws(input);
-                } else if (noun.equals("es")) { // show stream end-stream
-                    requestHistoricData(cmd, monitorManager);
+                } else if (noun.equals("es") | noun.equals("mes")) { // show stream end-stream
+                    requestHistoricData(cmd, noun, monitorManager);
                 } else if (noun.equals("monitor")) {
                     processMonitorCommand(input, monitorManager);
                 } else if (cmd.equals("rt")) {
@@ -110,14 +110,14 @@ public class ReplImpl implements Repl {
         }
     }
 
-    private boolean requestHistoricData(String cmd, MonitorManager monitorManager) {
+    private boolean requestHistoricData(String cmd, String symbol, MonitorManager monitorManager) {
         return switch (cmd) {
             case "limit" -> {
                 connector.buildOrder("MES");
                 yield true;
             }
             case "show" -> {
-                var action = connector.getHistoricalData("ES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_2);
+                var action = connector.getHistoricalData(symbol, IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_2);
                 history = action.asPriceHistory();
                 print(history.toString());
                 print(history.intradayPriceInfo(-1));
@@ -127,7 +127,7 @@ public class ReplImpl implements Repl {
                 yield true;
             }
             case "stream" -> {
-                connector.requestHistoricalData("MES", IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true, monitorManager);
+                connector.requestHistoricalData(symbol, IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true, monitorManager);
                 yield true;
             }
             case "end-stream" -> {

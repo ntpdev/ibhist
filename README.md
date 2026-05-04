@@ -31,18 +31,21 @@ running App.main with
 * 0 parameters starts IBConnectorImpl.process()
 * 1 dummy parameter starts ReplImpl.rum()
 
-## docker (using name = mongo)
+## docker (using name = mongodb)
 
-docker run --name mongo -p 27017:27017 -d mongodb/mongodb-community-server:latest 
+docker run --name mongodb -p 27017:27017 -d mongodb/mongodb-community-server:latest 
 
-docker start mongo
+docker start mongodb
 
-docker exec -it mongo mongosh
+docker exec -it mongodb mongosh
 
 ### example queries in mongosh
 use futures
 show collections
 db.daily.find({symbol:"esh6"}).sort({tradeDate:-1}).limit(5)
+
+## mongosh installed locally
+mongosh --eval "db.version()"
 
 ## remove file nul if accidentally created by a tool
 Remove-Item -LiteralPath "\\?\$($pwd.Path)\nul" -Force

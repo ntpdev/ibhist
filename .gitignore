@@ -1,18 +1,12 @@
-# Ignore Gradle project-specific cache directory
-.gradle
-.idea
-gradle
+# Gradle
+.gradle/
+build/
 
-# Ignore Gradle build output directory
-**/build/
-**/out/
-**/app/
+# IntelliJ IDEA
+.idea/
 *.iml
 
-*.jar
-*.war
-*.ear
-*.zip
-*.tar.gz
-*.exe
-*.dmg
+# OS
+.DS_Store
+Thumbs.db
+
