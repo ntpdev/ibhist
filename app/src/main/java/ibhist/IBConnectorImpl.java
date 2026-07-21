@@ -22,7 +22,7 @@ import static ibhist.StringUtils.print;
  */
 public class IBConnectorImpl implements IBConnector, ActionProvider {
     private static final Logger log = LogManager.getLogger(IBConnectorImpl.class.getSimpleName());
-    public static final String CONTRACT_MONTH = "202606";
+    public static final String CONTRACT_MONTH = "202609";
     private EClientSocket m_client;
     private EReaderSignal m_signal;
     private EReader reader;
@@ -52,7 +52,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                 switch (action) {
                     case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
                     case LATEST_WEEK -> saveLatestData(Duration.DAY_10);
-                    case HISTORICAL -> saveHistoricalDataRange("ES", "202606", LocalDate.of(2026, 5, 2), 4);
+                    case HISTORICAL -> saveHistoricalDataRange("NQ", "202606", LocalDate.of(2026, 6, 6), 4);
                     case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // unused
                 }
             } finally {

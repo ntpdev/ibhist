@@ -26,6 +26,7 @@ public class ReplImpl implements Repl {
     private final TimeSeriesRepository timeSeriesRepo;
     private final PriceHistoryRepository priceHistoryRepo;
     private PriceHistory history = null;
+    private int default_day = -1;
 
 
     @Inject
@@ -70,7 +71,7 @@ public class ReplImpl implements Repl {
                 } else if (cmd.equals("load")) {
                     load(noun);
                 } else if (cmd.equals("info") && history != null) {
-                    info(parseInt(noun, -1));
+                    info(parseInt(noun, default_day));
                 } else if (noun.equals("tws")) { // conn disc
                     processTws(input);
                 } else if (noun.equals("es") | noun.equals("mes")) { // show stream end-stream
@@ -79,12 +80,14 @@ public class ReplImpl implements Repl {
                     processMonitorCommand(input, monitorManager);
                 } else if (cmd.equals("rt")) {
                     processRt(input, monitorManager);
+                } else if (cmd.equals("select") && noun.equals("day")) {
+                    processSelect(input);
                 } else if (cmd.equals("minmax") && history != null) {
                     printMinMax(parseInt(noun, 15));
                 } else if (cmd.equals("p") && history != null) {
                     // param 1 = offset, -offset, hh:mm
                     if (noun.contains(":")) {
-                        tryParseTime(noun, history.indexEntry(-1).tradeDate()).ifPresent(barTime -> {
+                        tryParseTime(noun, history.indexEntry(default_day).tradeDate()).ifPresent(barTime -> {
                             int i = history.find(barTime);
                             if (i > 0) {
                                 printHistory(i - 9, i + 10);
@@ -170,6 +173,14 @@ public class ReplImpl implements Repl {
         return false;
     }
 
+    private boolean processSelect(List<String> input) {
+        if (history == null) {
+            return false;
+        }
+        default_day = input.size() > 2 ? Integer.parseInt(input.get(2)) : -1;
+        return true;
+    }
+
     private static int parseInt(String s, int defaultValue) {
         if (s == null || s.isBlank()) {
             return defaultValue;
@@ -214,8 +225,8 @@ public class ReplImpl implements Repl {
         }
         print(sb.toString());
         // TODO place order relative to high
-        var orderGroup = OrderBuilder.createSellRelativeToHigh(history, 10, 32, 10);
-        connector.placeOrders("MES", orderGroup);
+//        var orderGroup = OrderBuilder.createSellRelativeToHigh(history, 10, 32, 10);
+//        connector.placeOrders("MES", orderGroup);
     }
 
     void load(String s) {
@@ -236,6 +247,7 @@ public class ReplImpl implements Repl {
         PriceHistory.Index index = history.index();
         List<PriceHistory.IndexEntry> entries = index.entries();
         n = (n + entries.size()) % entries.size();
+        print(history.toString());
         PriceHistory.IndexEntry entry = entries.get(n);
         var sb = new StringBuilder();
         String formattedDate = entry.tradeDate().format(tradeDateformatter.withLocale(Locale.ENGLISH));

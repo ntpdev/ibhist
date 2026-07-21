@@ -7,6 +7,7 @@ build/
 *.iml
 
 # OS
+.openchrome/
 .DS_Store
 Thumbs.db
 

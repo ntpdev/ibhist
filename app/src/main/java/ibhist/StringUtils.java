@@ -25,7 +25,9 @@ public class StringUtils {
     public static final String ANSI_WHITE = "\u001B[37m";
 
 //    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w+)(?:,(\\d+))?]");
-    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w*)(?:,(\\d+))?]");
+    // groups: 1 = optional "/" (closing), 2 = primary colour, 3 = secondary colour OR legacy flag,
+    //         4 = flag when secondary colour present
+    public static final Pattern matchColours = Pattern.compile("\\[(/?)(\\w*)(?:,(\\w+)(?:,(\\d+))?)?]");
 //            Pattern.compile("\\[(black|red|green|yellow|blue|purple|cyan|white)](.*?)\\[/]");
 
     public static String getAnsiColour(String colour) {
@@ -43,9 +45,18 @@ public class StringUtils {
     }
 
     /**
-     * Replace markup colours by ANSI codes. Colours can be conditional
-     * @param input - can contain [red]text[/] or [red,1]text[/] . The ,1 is optional condition can be 0 or 1
-     * @return
+     * Replace markup colours by ANSI codes. Colours can be conditional.
+     * Supported forms:
+     * <ul>
+     *   <li>{@code [red]text[/]} - unconditional colour</li>
+     *   <li>{@code [red,1]text[/]} - legacy single-colour conditional; coloured when flag is 1</li>
+     *   <li>{@code [red,0]text[/]} - legacy single-colour conditional; plain when flag is 0</li>
+     *   <li>{@code [green,red]text[/]} - two-colour conditional; primary when flag (default 1)</li>
+     *   <li>{@code [green,red,1]text[/]} - primary colour when flag is 1</li>
+     *   <li>{@code [green,red,0]text[/]} - secondary colour when flag is 0</li>
+     * </ul>
+     * @param input - markup string
+     * @return ANSI-coloured string
      */
     public static String colourise(String input) {
         if (input == null || input.isEmpty()) {
@@ -79,28 +90,61 @@ public class StringUtils {
                 continue;
             }
 
-            int flagValue = 1; // default to enabled
+            String secondGroup = matcher.group(3);
+            String flagGroup = matcher.group(4);
 
-            if (matcher.group(3) != null) {
-                try {
-                    flagValue = Integer.parseInt(matcher.group(3));
-                } catch (NumberFormatException e) {
-                    flagValue = 0; // treat invalid numbers as disabled
-                }
-            }
-
-            if (flagValue == 1) { // Only apply color if flag is 1 or not present
+            if (secondGroup == null) {
+                // No secondary info: [color]text[/] - apply primary unconditionally
                 String ansiCode = getAnsiColour(colorName);
                 if (!ansiCode.isEmpty()) {
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(ansiCode));
+                    colorActive = true;
+                } else {
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
+                }
+                continue;
+            }
+
+            int flagValue;
+            boolean isTwoColorForm;
+
+            try {
+                flagValue = Integer.parseInt(secondGroup);
+                isTwoColorForm = false;
+            } catch (NumberFormatException e) {
+                isTwoColorForm = true;
+                flagValue = (flagGroup != null) ? Integer.parseInt(flagGroup) : 1;
+            }
+
+            if (isTwoColorForm) {
+                // [primary,secondary[,flag]] - always coloured; pick colour by flag
+                String ansiCode = getAnsiColour(colorName);
+                if (flagValue != 1) {
+                    ansiCode = getAnsiColour(secondGroup);
+                    if (ansiCode.equals(ANSI_RESET)) {
+                        ansiCode = getAnsiColour(colorName);
+                    }
+                }
+                if (ansiCode.isEmpty() || ansiCode.equals(ANSI_RESET)) {
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
+                    continue;
+                }
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(ansiCode));
+                colorActive = true;
+                continue;
+            }
+
+            // Legacy single-colour conditional [color,flag]
+            if (flagValue == 1) {
+                String ansiCode = getAnsiColour(colorName);
+                if (!ansiCode.isEmpty() && !ansiCode.equals(ANSI_RESET)) {
                     matcher.appendReplacement(sb, Matcher.quoteReplacement(ansiCode));
                     colorActive = true;
                     continue;
                 }
             }
 
-            // If we get here, either:
-            // - It's an unknown color name
-            // - Or flag was set to 0 to disable coloring
+            // flag 0 or unknown colour: emit plain text
             matcher.appendReplacement(sb, Matcher.quoteReplacement(""));
         }
 

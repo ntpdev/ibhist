@@ -738,15 +738,16 @@ public class PriceHistory implements Serializable {
                     ind += " ▼";
                 }
                 double close = closes[i];
+                double open = opens[i];
                 var day = indexEntry(-1);
                 int idxOpen = max(day.euStart(), day.rthStart());
                 double sessionOpen = opens[idxOpen];
-                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [cyan]%.2f[/] [yellow,%d]%5.0f[/] [yellow,%d]%4.0f[/] %.2f %.2f %2.0f %s [green,%d]%3d[/] [red,%d]%3d[/] %s%s%s%s").formatted(
+                sb.append(("%s %.2f [green,%d]%.2f[/] [red,%d]%.2f[/] [%s]%.2f[/] [yellow,%d]%5.0f[/] [yellow,%d]%4.0f[/] %.2f %.2f %2.0f %s [green,%d]%3d[/] [red,%d]%3d[/] %s%s%s%s").formatted(
                                 dates[i].toLocalTime(),
-                                opens[i],
+                                open,
                                 highs[i] > prevHi ? 1 : 0, highs[i],
                                 lows[i] < prevLo ? 1 : 0, lows[i],
-                                close,
+                                mapOCColour(open, close), close,
                                 DoubleMath.fuzzyEquals(volumes[i], volumeStats.max(), 1e-3) ? 1 : 0, volumes[i],
                                 nvol[i] > 99 ? 1 : 0, nvol[i],
                                 vwaps[i], emas[i],
@@ -759,6 +760,12 @@ public class PriceHistory implements Serializable {
             prevLo = lows[i];
         }
         return sb.toString();
+    }
+
+    private String mapOCColour(double x, double y) {
+        if (x < y) return "green";
+        else if (x > y) return "red";
+        return "cyan";
     }
 
     /**

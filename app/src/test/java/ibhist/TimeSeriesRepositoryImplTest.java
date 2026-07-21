@@ -83,9 +83,7 @@ class TimeSeriesRepositoryImplTest {
             repository.createMinVolTimeSeriesCollection("min_vol", true);
             symbols.stream().map(phr::load).filter(Optional::isPresent).map(Optional::get).forEach(h -> {
                         repository.insertM1(h);
-                        if (h.getSymbol().startsWith("es")) {
-                            repository.insertMinVol(h);
-                        }
+                        repository.insertMinVol(h);
                     });
             repository.rebuildTradeDateIndex();
             repository.buildAllDaily();
@@ -95,7 +93,7 @@ class TimeSeriesRepositoryImplTest {
     @Test
     void test_selectiveRebuild() {
         var repo = new PriceHistoryRepositoryImpl();
-        var hist = repo.load("esm6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESM6 20260313.csv"));
+        var hist = repo.load("esu6", Paths.get(System.getProperty("user.home"), "Documents", "data", "ESU6 20260608.csv"));
         hist.addStandardColumns();
         log.info(hist);
         repository.selectiveRebuild(hist);

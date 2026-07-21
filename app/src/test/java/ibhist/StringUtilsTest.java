@@ -35,6 +35,27 @@ class StringUtilsTest {
     }
 
     @Test
+    void colourise_two_colour_true() {
+        assertThat(StringUtils.colourise("[green,red,1]x[/]")).isEqualTo("\u001B[32mx\u001B[0m");
+    }
+
+    @Test
+    void colourise_two_colour_false() {
+        assertThat(StringUtils.colourise("[green,red,0]x[/]")).isEqualTo("\u001B[31mx\u001B[0m");
+    }
+
+    @Test
+    void colourise_two_colour_default_flag() {
+        assertThat(StringUtils.colourise("[green,red]x[/]")).isEqualTo("\u001B[32mx\u001B[0m");
+    }
+
+    @Test
+    void colourise_legacy_single_colour_still_works() {
+        assertThat(StringUtils.colourise("[red,0]x[/]")).isEqualTo("x");
+        assertThat(StringUtils.colourise("[red,1]x[/]")).isEqualTo("\u001B[31mx\u001B[0m");
+    }
+
+    @Test
     void print_null() {
         String s = null;
         assertThat(StringUtils.print(s)).isEqualTo("null");
