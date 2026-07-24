@@ -27,11 +27,12 @@ public class HistoricalDataAction extends ActionBase {
     private final List<Bar> bars = new ArrayList<>();
     private final MonitorManager monitorManager;
     private final List<PriceMonitor> monitors = new ArrayList<>();
+    private final EventService eventService;
     private PriceHistory hist = null;
     private int currentBarCount = 99;
     private boolean init = false;
 
-    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, LocalDate endDate, Duration duration, boolean keepUpToDate, MonitorManager monitorManager) {
+    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, LocalDate endDate, Duration duration, boolean keepUpToDate, MonitorManager monitorManager, EventService eventService) {
         super(client, idGenerator, queue);
         this.contract = contract;
         this.endDate = endDate;
@@ -39,6 +40,7 @@ public class HistoricalDataAction extends ActionBase {
         this.keepUpToDate = keepUpToDate;
         this.updateUntil = keepUpToDate ? LocalDateTime.now().plusMinutes(15) : null;
         this.monitorManager = monitorManager;
+        this.eventService = eventService;
     }
 
     public Contract getContract() {
@@ -110,6 +112,7 @@ public class HistoricalDataAction extends ActionBase {
                 hist.strat("strat");
                 StringUtils.print(hist.toString());
                 StringUtils.print(hist.asTextTable(-15));
+                triggerEvents(hist);
             }
         } else {
             bars.add(bar);
@@ -119,6 +122,37 @@ public class HistoricalDataAction extends ActionBase {
         if (keepUpToDate && currentBarCount == 0 && parseTime(bar).isAfter(updateUntil)) {
             cancel();
         }
+    }
+
+    private void triggerEvents(PriceHistory hist) {
+        var nvols = ArrayUtils.rollingStandardize(hist.getColumn("volume"), 0, 0, 20);
+
+        int len = hist.length();
+        double lastNvol = nvols[len - 1];
+        if (lastNvol > 99) {
+            eventService.publish(new VolumeSpikeEvent(hist.bar(len-1).start()));
+        }
+    }
+
+    private boolean triggerOnVolSpike(PriceHistory hist) {
+        int len = hist.length();
+        if (len < 15) {
+            return false;
+        }
+        int last = len - 1;
+        double[] volumes = hist.getColumn("volume");
+        double lastVolume = volumes[last];
+        double priorMax = 0;
+        for (int i = last - 14; i < last; i++) {
+            if (volumes[i] > priorMax) {
+                priorMax = volumes[i];
+            }
+        }
+        if (lastVolume > priorMax) {
+            eventService.publish(new VolumeSpikeEvent(hist.bar(last).start()));
+            return true;
+        }
+        return false;
     }
 
     private void init() {

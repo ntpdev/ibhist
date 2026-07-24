@@ -35,13 +35,15 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     private final Provider<TimeSeriesRepository> timeSeriesRepo;
     private final Provider<PriceHistoryRepository> priceHistoryRepo;
     private final ContractFactory contractFactory;
+    private final EventService eventService;
 
 
     @Inject
-    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepo, Provider<PriceHistoryRepository> priceHistoryRepo, ContractFactory contractFactory) {
+    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepo, Provider<PriceHistoryRepository> priceHistoryRepo, ContractFactory contractFactory, EventService eventService) {
         this.timeSeriesRepo = timeSeriesRepo;
         this.priceHistoryRepo = priceHistoryRepo;
         this.contractFactory = contractFactory;
+        this.eventService = eventService;
     }
 
     @Override
@@ -284,7 +286,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     }
 
     private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate, MonitorManager manager) {
-        var action = new HistoricalDataAction(m_client, id, queue, contract, null, duration, keepUpToDate, manager);
+        var action = new HistoricalDataAction(m_client, id, queue, contract, null, duration, keepUpToDate, manager, eventService);
 //        var action = new HistoricalDataAction(m_client, id, queue, contract, LocalDate.of(2025, 11, 9), bars, keepUpToDate, manager);
         sendRequest(action);
         return action;
@@ -326,7 +328,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
             log.info("Requesting timeseries ending date {}", periodEnd);
             var action = new HistoricalDataAction(
                     m_client, id, queue, contract, periodEnd,
-                    Duration.DAY_10, false, null
+                    Duration.DAY_10, false, null, eventService
             );
             sendRequest(action);
             processHistoricalData(takeFromQueue(action), true);

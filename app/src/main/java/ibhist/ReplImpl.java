@@ -25,15 +25,17 @@ public class ReplImpl implements Repl {
     private final IBConnector connector;
     private final TimeSeriesRepository timeSeriesRepo;
     private final PriceHistoryRepository priceHistoryRepo;
+    private final SoundPlayer soundPlayer;
     private PriceHistory history = null;
     private int default_day = -1;
 
 
     @Inject
-    public ReplImpl(IBConnector connector, TimeSeriesRepository timeSeriesRepo, PriceHistoryRepository priceHistoryRepo) {
+    public ReplImpl(IBConnector connector, TimeSeriesRepository timeSeriesRepo, PriceHistoryRepository priceHistoryRepo, SoundPlayer soundPlayer) {
         this.connector = connector;
         this.timeSeriesRepo = timeSeriesRepo;
         this.priceHistoryRepo = priceHistoryRepo;
+        this.soundPlayer = soundPlayer;
     }
 
     public void run() {
@@ -96,6 +98,8 @@ public class ReplImpl implements Repl {
                     } else {
                         tryParseInt(noun).ifPresent(this::printHistory);
                     }
+                } else if (noun.equals("sound")) {
+                    processSoundCommand(input);
                 } else {
                     // process "add monitor > 5924.25"
                     monitorManager.processCommand(input);
@@ -103,6 +107,20 @@ public class ReplImpl implements Repl {
             }
         }
         reader.close();
+    }
+
+    private void processSoundCommand(List<String> input) {
+        if (input.size() < 2) {
+            return;
+        }
+        String cmd = input.get(0).toLowerCase();
+        if (cmd.equals("enable")) {
+            soundPlayer.setEnabled(true);
+            print("[green]sound enabled[/]");
+        } else if (cmd.equals("disable")) {
+            soundPlayer.setEnabled(false);
+            print("[yellow]sound disabled[/]");
+        }
     }
 
     private void processMonitorCommand(List<String> input, MonitorManager monitorManager) {

@@ -37,6 +37,11 @@ public class App {
         log.info("Java version: {}", System.getProperty("java.version"));
         var injector = Guice.createInjector(new AppModule());
 
+        // Wire domain event listeners at startup
+        EventService eventService = injector.getInstance(EventService.class);
+        SoundPlayer soundPlayer = injector.getInstance(SoundPlayer.class);
+        eventService.listen(VolumeSpikeEvent.class, soundPlayer);
+
         // Determine the command - default to "day" if no args or empty
         String command = (args.length == 0) ? "day" : args[0].toLowerCase().trim();
         log.info("ibhist '{}'", command);

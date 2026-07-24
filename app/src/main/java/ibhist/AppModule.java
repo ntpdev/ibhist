@@ -11,5 +11,7 @@ public class AppModule extends AbstractModule {
         bind(TimeSeriesRepository.class).to(TimeSeriesRepositoryImpl.class);
         bind(PriceHistoryRepository.class).to(PriceHistoryRepositoryImpl.class);
         bind(Repl.class).to(ReplImpl.class);
+        bind(EventService.class).to(EventServiceImpl.class).asEagerSingleton();
+        bind(SoundPlayer.class).to(SoundPlayerImpl.class).asEagerSingleton();
     }
 }
