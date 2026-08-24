@@ -523,6 +523,30 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         return ldt.toInstant(UTC);
     }
 
+    
+    static long findVolumeCutoff(List<TradeDateIndexEntry> entries) {
+        if (entries.size() < 10) {
+            return 0;
+        }
+        long[] volumes = entries.stream().mapToLong(TradeDateIndexEntry::volume).sorted().toArray();
+        double median = volumes.length % 2 == 0
+                ? (volumes[volumes.length / 2 - 1] + volumes[volumes.length / 2]) / 2.0
+                : volumes[volumes.length / 2];
+        int bestIdx = 0;
+        long maxGap = -1;
+        for (int i = 0; i < volumes.length - 1; i++) {
+            if (volumes[i + 1] <= median) {
+                long gap = volumes[i + 1] - volumes[i];
+                if (gap > maxGap) {
+                    maxGap = gap;
+                    bestIdx = i;
+                }
+            }
+        }
+        return volumes[bestIdx];
+    }
+
+
     void insertTradeDateIndexRows(Map<String, List<TradeDateIndexEntry>> data) {
         var collection = getCollection(TRADE_DATE_INDEX_COLLECTION);
         InsertManyOptions options = new InsertManyOptions().ordered(false);
@@ -536,7 +560,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             }
 
             List<Document> docs = new ArrayList<>(rows.size());
-
+            long maxBars = rows.stream().mapToLong(TradeDateIndexEntry::bars).max().orElse(0);
+            long volumeCutoff = findVolumeCutoff(rows);
             for (TradeDateIndexEntry e : rows) {
                 Document doc = new Document()
                         .append("symbol", symbol)
@@ -550,6 +575,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                     doc.append("rthStart", rthStart)
                        .append("rthEnd", toMongoDate(e.rthEnd()));
                 }
+                doc.append("isComplete", e.bars() == maxBars && e.volume() > volumeCutoff);
                 docs.add(doc);
             }
 
@@ -570,7 +596,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
                         e.volume(),
                         e.bars(),
                         e.rthStart() == null ? LocalDateTime.MIN : asLocalDateTime(e.rthStart()),
-                        e.rthEnd() == null ? LocalDateTime.MIN : asLocalDateTime(e.rthEnd())
+                        e.rthEnd() == null ? LocalDateTime.MIN : asLocalDateTime(e.rthEnd()),
+                        e.isComplete()
                 ))
                 .toList();
     }
@@ -602,7 +629,8 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
             long volume,
             long bars,
             Date rthStart,
-            Date rthEnd
+            Date rthEnd,
+            boolean isComplete
     ) {
     }
 

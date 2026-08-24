@@ -94,20 +94,9 @@ public interface TimeSeriesRepository {
             long volume,
             long bars, // number of m1 bars
             LocalDateTime rthStart, // MIN_DATETIME indicates partial day with no rthStart
-            LocalDateTime rthEnd // MIN_DATETIME present if rthStart is present
+            LocalDateTime rthEnd, // MIN_DATETIME present if rthStart is present
+            boolean isComplete
     ) {
-
-        public TradeDateIndexEntry(LocalDateTime start, LocalDateTime end, long volume, long bars) {
-            this(
-                    end.toLocalDate(),
-                    start,
-                    end,
-                    volume,
-                    bars,
-                    LocalDateTime.MIN,
-                    LocalDateTime.MIN
-            );
-        }
 
         public TradeDateIndexEntry {
             if (start == null || end == null) {
@@ -122,19 +111,21 @@ public interface TimeSeriesRepository {
             if (bars != java.time.Duration.between(start, end).toMinutes() + 1) {
                 throw new IllegalArgumentException("number of bars does not match time range");
             }
+        }
 
-            rthStart = LocalDateTime.MIN;
-            rthEnd = LocalDateTime.MIN;
-
-            if (bars > RTH_START_OFFSET) {
-                LocalDateTime computedRthStart = start.plusMinutes(RTH_START_OFFSET);
-                LocalDateTime computedRthEnd = start.plusMinutes(RTH_END_OFFSET);
-
-                rthStart = computedRthStart.isAfter(end) ? end : computedRthStart;
-                rthEnd = computedRthEnd.isAfter(end) ? end : computedRthEnd;
-            }
-
-            date = end.toLocalDate();
+        public TradeDateIndexEntry(LocalDateTime start, LocalDateTime end, long volume, long bars) {
+            this(end.toLocalDate(),
+                 start,
+                 end,
+                 volume,
+                 bars,
+                 bars > RTH_START_OFFSET
+                         ? (start.plusMinutes(RTH_START_OFFSET).isAfter(end) ? end : start.plusMinutes(RTH_START_OFFSET))
+                         : LocalDateTime.MIN,
+                 bars > RTH_START_OFFSET
+                         ? (start.plusMinutes(RTH_END_OFFSET).isAfter(end) ? end : start.plusMinutes(RTH_END_OFFSET))
+                         : LocalDateTime.MIN,
+                 true);
         }
     }
 

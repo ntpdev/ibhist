@@ -19,6 +19,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -184,7 +185,7 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
      * @return sorted list of paths to CSV files matching the naming pattern
      */
     List<Path> findAllDataFiles() {
-        Pattern pattern = Pattern.compile("^[\\w-]+ \\d{8}\\.csv$", Pattern.CASE_INSENSITIVE);
+        Pattern pattern = Pattern.compile("^[\\w-]+ \\d{8}" + Pattern.quote(extension) + "$", Pattern.CASE_INSENSITIVE);
         try (var paths = Files.find(root, 1, (path, attrs) -> {
             if (!attrs.isRegularFile()) {
                 return false;
@@ -258,13 +259,13 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
 
 
     /**
-     * load csv files. files are processed in order skipping duplicate timestamps
+     * load csv files. files are processed in order skipping duplicate timestamps from newer files
      *
      * @param files
      * @return
      * @throws IOException
      */
-    List<IBCSV> loadCsv(List<Path> files) throws IOException {
+    List<IBCSV> loadCsvEx(List<Path> files) throws IOException {
         List<IBCSV> xs = new ArrayList<>();
         for (var file : files) {
             LocalDateTime hw = xs.isEmpty() ? LocalDateTime.MIN : xs.getLast().date();
@@ -275,6 +276,60 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
                     .map(IBCSV::parse)
                     .filter(e -> e.date().isAfter(hw))
                     .toList());
+        }
+        return xs;
+    }
+
+    /**
+     * load csv files. files are processed in order.
+     * check within each file that the timestamp is strictly increasing
+     * duplicate timestamps across files should keep the row with the largest volume
+     * assert that the kept row comes from the most recent file (should be true)
+     *
+     * @param files
+     * @return
+     * @throws IOException
+     */
+    List<IBCSV> loadCsv(List<Path> files) throws IOException {
+        List<IBCSV> xs = new ArrayList<>();
+        for (var file : files) {
+            log.info("loadCsv {}", file);
+            List<IBCSV> rows;
+            // skip header line which does not have an index
+            try (var lines = Files.lines(file)) {
+                rows = lines.filter(e -> Character.isDigit(e.charAt(0)))
+                        .map(IBCSV::parse)
+                        .toList();
+            }
+            if (rows.isEmpty()) {
+                continue;
+            }
+            // xs and rows are both sorted by timestamp so merge them. files are processed in date
+            // order so rows can only overlap the tail of xs - binary search to the first candidate
+            int j = Collections.binarySearch(xs, rows.getFirst(), Comparator.comparing(IBCSV::date));
+            j = j >= 0 ? j : -j - 1;
+            LocalDateTime prev = null;
+            for (var row : rows) {
+                if (prev != null && !row.date().isAfter(prev)) {
+                    throw new IllegalStateException("Timestamp " + row.date() + " is not after " + prev + " in " + file);
+                }
+                prev = row.date();
+                while (j < xs.size() && xs.get(j).date().isBefore(row.date())) {
+                    j++;
+                }
+                if (j < xs.size() && xs.get(j).date().equals(row.date())) {
+                    var duplicate = xs.get(j);
+                    if (row.volume() < duplicate.volume()) {
+                        throw new IllegalStateException("Row at " + row.date() + " in " + file + " has volume " + row.volume()
+                                + " less than volume " + duplicate.volume() + " from earlier file - expected most recent file to have the largest volume");
+                    }
+                    log.info("Replacing duplicate timestamp {} from newer file {} with volume {} over {}", row.date(), file.getFileName(), row.volume(), duplicate.volume());
+                    xs.set(j, row);
+                } else {
+                    xs.add(j, row);
+                }
+                j++;
+            }
         }
         return xs;
     }
