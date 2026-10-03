@@ -11,56 +11,58 @@ class ArrayUtilsTest {
     void local_max_decreasing() {
         double[] xs = {5, 4, 3, 2, 1};
         var ys = ArrayUtils.localMax(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(0);
+        assertThat(ys).isEmpty();
     }
 
     @Test
     void local_max() {
         double[] xs = {1, 2, 3, 2, 1, 2, 3, 2, 1, 10};
         var ys = ArrayUtils.localMax(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(2, 6, 9);
+        assertThat(ys).containsExactly(2, 6);
     }
 
     @Test
     void local_max_equal() {
+        // plateaus of equal prices produce no swing point
         double[] xs = {1, 2, 3, 3, 3, 2, 1};
         var ys = ArrayUtils.localMax(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(2, 3, 4);
+        assertThat(ys).isEmpty();
     }
 
     @Test
     void local_max_wave() {
         var xs = sine_wave();
         var ys = ArrayUtils.localMax(xs, 0, 0, 5);
-        assertThat(ys).containsExactly(10, 50, 79);
+        assertThat(ys).containsExactly(10, 50);
     }
 
     @Test
     void local_min_decreasing() {
         double[] xs = {5, 4, 3, 2, 1};
         var ys = ArrayUtils.localMin(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(4);
+        assertThat(ys).isEmpty();
     }
 
     @Test
     void local_min() {
         double[] xs = {5, 4, 3, 4, 5, 4, 3, 4, 5, 1};
         var ys = ArrayUtils.localMin(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(2, 6, 9);
+        assertThat(ys).containsExactly(2, 6);
     }
 
     @Test
     void local_min_equal() {
+        // plateaus of equal prices produce no swing point
         double[] xs = {3, 2, 1, 1, 1, 2, 3, 4};
         var ys = ArrayUtils.localMin(xs, 0, 0, 2);
-        assertThat(ys).containsExactly(2, 3, 4);
+        assertThat(ys).isEmpty();
     }
 
     @Test
     void local_min_wave() {
         var xs = sine_wave();
         var ys = ArrayUtils.localMin(xs, 0, 0, 5);
-        assertThat(ys).containsExactly(0, 30, 70);
+        assertThat(ys).containsExactly(30, 70);
     }
 
     @Test
@@ -120,8 +122,8 @@ class ArrayUtilsTest {
         var highs = sine_wave();
         var lows = sine_wave();
         var xs = ArrayUtils.findSwings(highs, lows, 0, 0, 5);
-        assertThat(xs).extracting(ArrayUtils.Swing::index).containsExactly(0, 10, 30, 50, 70, 79);
-        assertThat(xs).extracting(ArrayUtils.Swing::type).containsExactly(LOCAL_LOW, LOCAL_HIGH, LOCAL_LOW, LOCAL_HIGH, LOCAL_LOW, LOCAL_HIGH);
+        assertThat(xs).extracting(ArrayUtils.Swing::index).containsExactly(10, 30, 50, 70);
+        assertThat(xs).extracting(ArrayUtils.Swing::type).containsExactly(LOCAL_HIGH, LOCAL_LOW, LOCAL_HIGH, LOCAL_LOW);
     }
 
     double[] sine_wave() {

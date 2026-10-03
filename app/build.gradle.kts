@@ -18,28 +18,28 @@ repositories {
 dependencies {
     // Use JUnit Jupiter for testing.
     // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter
-    testImplementation("org.junit.jupiter:junit-jupiter:5.14.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
     // https://mvnrepository.com/artifact/org.assertj/assertj-core
-    testImplementation("org.assertj:assertj-core:3.27.3")
+    testImplementation("org.assertj:assertj-core:3.27.7")
     // https://mvnrepository.com/artifact/org.mockito/mockito-core
-    testImplementation("org.mockito:mockito-core:5.21.0")
+    testImplementation("org.mockito:mockito-core:5.24.0")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // This dependency is used by the application.
     // https://mvnrepository.com/artifact/org.jetbrains/annotations
-    implementation("org.jetbrains:annotations:26.0.2-1")
+    implementation("org.jetbrains:annotations:26.1.0")
     // https://mvnrepository.com/artifact/com.google.guava/guava
-    implementation("com.google.guava:guava:33.5.0-jre")
+    implementation("com.google.guava:guava:33.7.1-jre")
     // https://mvnrepository.com/artifact/com.google.inject/guice
     implementation("com.google.inject:guice:7.0.0")
     // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
-    implementation("org.apache.logging.log4j:log4j-core:2.25.3")
+    implementation("org.apache.logging.log4j:log4j-core:2.26.1")
     // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync
-    implementation("org.mongodb:mongodb-driver-sync:5.6.2")
+    implementation("org.mongodb:mongodb-driver-sync:5.13.0")
     // https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java
     // adding explicit link its used by TWS but that stopped working look in "TWS API\source\JavaClient\jars"
-    implementation("com.google.protobuf:protobuf-java:4.31.1")
+    implementation("com.google.protobuf:protobuf-java:4.36.2")
     // add all jar files in lib dir twsapi.jar
     implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.jar"))))
 }

@@ -7,87 +7,67 @@ import java.util.List;
 public class ArrayUtils {
 
     /**
-     * returns the indexes of local maxima in a centered sliding window of size 2n + 1
-     * An index i is in the list if values[i] >= all items in window
+     * returns the indexes of swing highs in a centered window, matching the futdata
+     * {@code _find_swings} algorithm.
+     * <p>
+     * An index i is a swing high if values[i] is strictly greater than every other
+     * value within {@code windowSize / 2} bars on each side of i. Centers too close
+     * to either edge of the start/end slice to fill a full half window are skipped,
+     * and plateaus of equal prices produce no swing point.
+     * <p>
      * Negative end values are treated as counting from the end = 0 is values.length
      */
     public static int[] localMax(double[] values, int start, int end, int windowSize) {
-        if (end <= 0) {
-            end += values.length;
-        }
-
-        start = Math.max(0, start - 1);
-        end = Math.min(values.length, end);
-
-        if (start >= end) {
-            return new int[0];
-        }
-
-        int[] results = new int[end - start];
-        int n = 0;
-
-        for (int i = start; i < end; i++) {
-            // Define window bounds
-            int windowStart = Math.max(0, i - windowSize);
-            int windowEnd = Math.min(values.length - 1, i + windowSize);
-
-            boolean isLocalMax = true;
-            double currentValue = values[i];
-
-            // Check if current value is >= all values in window
-            for (int j = windowStart; j <= windowEnd; j++) {
-                if (values[j] > currentValue) {
-                    isLocalMax = false;
-                    break;
-                }
-            }
-
-            if (isLocalMax) {
-                results[n++] = i;
-            }
-        }
-
-        // Return only the filled portion of the array
-        return Arrays.copyOf(results, n);
+        return findSwingIndexes(values, start, end, windowSize, true);
     }
 
     /**
-     * returns the indexes of local minima in a sliding window of size 2n + 1
-     * An index i is in the list if values[i] <= all items in window
+     * returns the indexes of swing lows in a centered window, matching the futdata
+     * {@code _find_swings} algorithm.
+     * <p>
+     * An index i is a swing low if values[i] is strictly less than every other
+     * value within {@code windowSize / 2} bars on each side of i. Centers too close
+     * to either edge of the start/end slice to fill a full half window are skipped,
+     * and plateaus of equal prices produce no swing point.
+     * <p>
      * Negative end values are treated as counting from the end = 0 is values.length
      */
     public static int[] localMin(double[] values, int start, int end, int windowSize) {
+        return findSwingIndexes(values, start, end, windowSize, false);
+    }
+
+    private static int[] findSwingIndexes(double[] values, int start, int end, int windowSize, boolean isHigh) {
         if (end <= 0) {
             end += values.length;
         }
 
-        start = Math.max(0, start - 1);
+        start = Math.max(0, start);
         end = Math.min(values.length, end);
 
         if (start >= end) {
             return new int[0];
         }
 
+        int half = windowSize / 2;
         int[] results = new int[end - start];
         int n = 0;
 
         for (int i = start; i < end; i++) {
-            // Define window bounds
-            int windowStart = Math.max(0, i - windowSize);
-            int windowEnd = Math.min(values.length - 1, i + windowSize);
+            if (i - half < start || i + half >= end) {
+                continue;
+            }
 
-            boolean isLocalMin = true;
             double currentValue = values[i];
+            boolean isExtreme = true;
 
-            // Check if current value is <= all values in window
-            for (int j = windowStart; j <= windowEnd; j++) {
-                if (values[j] < currentValue) {
-                    isLocalMin = false;
+            for (int j = i - half; j <= i + half; j++) {
+                if (j != i && (isHigh ? values[j] >= currentValue : values[j] <= currentValue)) {
+                    isExtreme = false;
                     break;
                 }
             }
 
-            if (isLocalMin) {
+            if (isExtreme) {
                 results[n++] = i;
             }
         }
@@ -219,6 +199,12 @@ public class ArrayUtils {
         return result;
     }
 
+    /**
+     * find swing points over the start/end slice using a centered window of
+     * {@code windowSize} bars (half = windowSize / 2 each side). Swing highs are
+     * detected on the highs array, swing lows on the lows array, and the result is
+     * merged into one index-ordered list, matching the futdata get_m1_swings algorithm.
+     */
     public static List<Swing> findSwings(double[] highs, double[] lows, int start, int end, int windowSize) {
         var hs = localMax(highs, start, end, windowSize);
         var ls = localMin(lows, start, end, windowSize);

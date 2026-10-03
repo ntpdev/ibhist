@@ -51,14 +51,21 @@ public class ReplImpl implements Repl {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         print("""
                 [yellow]enter command
-                x| load sym | info n | ib | p n | minmax n=15
                 x - exit
-                load zesh6
-                info index-entry
+                load sym - load price history from csv e.g. load zesh6
+                info n - info for index entry n (default -1, negative offsets from end)
                 p n - print first or last n bars or bars at time hh:mm
-                conn tws / disc tws - connect disconnect from TWS
+                minmax n - print swing highs/lows (default n=15)
+                select day n - set default day used by info / p hh:mm
+                conn tws / disc tws - connect / disconnect from TWS
                 show es - fetch hist data from ib and update mdb
-                stream es - start historical streaming data[/]""");
+                stream es / end-stream es - start / finish historical streaming data
+                limit mes - build limit order for MES
+                rt / rt cancel - start / stop realtime bars
+                list monitor - print current monitors
+                add monitor > 5924.25 n - add price monitor with repeat count
+                del monitor - remove last monitor
+                enable sound / disable sound - toggle sound alerts[/]""");
         String line;
         MonitorManager monitorManager = new MonitorManager();
         while ((line = reader.readLine()) != null) {
