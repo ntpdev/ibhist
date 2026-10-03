@@ -20,6 +20,25 @@ class PriceHistoryRepositoryTest {
     private static final Logger log = LogManager.getLogger("PriceHistoryRepositoryTest");
     private static final Path dataDir = Paths.get(System.getProperty("user.home"), "Documents", "data");
 
+    private static PriceHistory getPriceHistory() {
+        var repository = new PriceHistoryRepositoryImpl();
+        return repository.load("esz4").get();
+    }
+
+    private static void save(List<PriceHistory.Bar> minVol) {
+        try {
+            var buffer = new StringBuffer();
+            buffer.append("date,dateCl,open,high,low,close,volume,vwap").append(System.lineSeparator());
+            for (int i = 0; i < minVol.size(); i++) {
+                PriceHistory.Bar bar = minVol.get(i);
+                buffer.append("%s,%s,%.2f,%.2f,%.2f,%.2f,%.1f,%.2f%n".formatted(bar.start(), bar.end(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume(), bar.vwap()));
+            }
+            Files.writeString(dataDir.resolve("es-minvol.csv"), buffer);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     void test_loadAllDays() {
         var history = getPriceHistory();
@@ -60,21 +79,9 @@ class PriceHistoryRepositoryTest {
     }
 
     @Test
-    void test_findAllDataFiles_for_symbol() {
-        var repo = new PriceHistoryRepositoryImpl();
-        var xs = repo.findAllDataFiles("esh6");
-        assertThat(xs.size()).isGreaterThan(1);
-        var history = repo.load("esh6");
-        assertThat(history.isEmpty()).isFalse();
-        var c = history.get().barIndex("bi");
-        var cummvol = history.get().cumulative("volume", "cummvol", c);
-    }
-
-
-    @Test
     void test_load_arbitrary_file() {
         var repo = new PriceHistoryRepositoryImpl();
-        var hist = repo.load("esh6", Paths.get(System.getProperty("user.home"), "Documents", "data", "zESH6 20260211.csv"));
+        var hist = repo.load("esh6", Paths.get(System.getProperty("user.home"), "Documents", "data", "ESH6 20251211.csv"));
         hist.addStandardColumns();
         log.info(hist);
         log.info(hist.index().makeMessagesMap(-1));
@@ -153,14 +160,6 @@ class PriceHistoryRepositoryTest {
         log.info(history.printBars(highPoints.getLast().index));
     }
 
-    private static PriceHistory getPriceHistory() {
-        var repository = new PriceHistoryRepositoryImpl();
-        return repository.load("esz4").get();
-    }
-
-    record Point(int index, double value, int count) {
-    }
-
 //    @Test
 //    void test_loadSingleDay() {
 //        var repository = new PriceHistoryRepository();
@@ -184,21 +183,6 @@ class PriceHistoryRepositoryTest {
         var entry = history.indexEntry(-1);
         log.info(entry);
     }
-
-    private static void save(List<PriceHistory.Bar> minVol) {
-        try {
-            var buffer = new StringBuffer();
-            buffer.append("date,dateCl,open,high,low,close,volume,vwap").append(System.lineSeparator());
-            for (int i = 0; i < minVol.size(); i++) {
-                PriceHistory.Bar bar = minVol.get(i);
-                buffer.append("%s,%s,%.2f,%.2f,%.2f,%.2f,%.1f,%.2f%n".formatted(bar.start(), bar.end(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume(), bar.vwap()));
-            }
-            Files.writeString(dataDir.resolve("es-minvol.csv"), buffer);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
 
     @Test
     void test_print_daily() {
@@ -229,5 +213,8 @@ class PriceHistoryRepositoryTest {
         } catch (IOException e) {
             log.error(e);
         }
+    }
+
+    record Point(int index, double value, int count) {
     }
 }

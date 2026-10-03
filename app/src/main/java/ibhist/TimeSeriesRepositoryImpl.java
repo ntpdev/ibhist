@@ -584,6 +584,7 @@ public class TimeSeriesRepositoryImpl implements TimeSeriesRepository {
         }
     }
 
+    @Override
     public List<TradeDateIndexEntry> queryTradeDates(String symbol, long minVolume) {
         var collection = getCollection(TRADE_DATE_INDEX_COLLECTION, TradeDateMDB.class);
         var filter = Filters.and(Filters.eq("symbol", symbol), Filters.gte("volume", minVolume));

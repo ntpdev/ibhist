@@ -157,7 +157,8 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
     /**
      * return ordered (lowercase) list of all futures symbols available, this will include zes zmes files
      */
-    List<String> findAllFuturesSymbols() {
+    @Override
+    public List<String> findAllFuturesSymbols() {
         return findAllDataFiles().stream()
                 .map(e -> WS_SPLITTER.splitToList(e.getFileName().toString().toLowerCase()).getFirst())
                 .filter(e ->  e.length() >= 4 && FUTURES_TICKER.matcher(e).matches() )

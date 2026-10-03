@@ -12,9 +12,9 @@ The TWS API is asynchronous in nature. Requests are made on one thread and respo
 The main data structure is PriceHistory.java which holds timeseries data as columns along with calculated indicators. Data can be loaded from CSV files via PriceHistoryRepository or from MongoDB timeseries via TimeSeriesRepository.
 
 ## Environment
-- Java JDK 25
-- Gradle 8 with Kotlin DSL
-- Guice for dependency injection
+- Java 25 LTS
+- Gradle 9.7 with Kotlin DSL
+- Guice 7 for dependency injection
 - MongoDB 8 via native MongoDB Java driver 5.6.x
 - Log4j2 for logging
 

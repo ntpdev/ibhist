@@ -2,6 +2,7 @@ package ibhist;
 
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,4 +26,9 @@ public interface PriceHistoryRepository {
      * @return
      */
     Path saveCsv(String symbol, LocalDate startDate, String csvContent);
+
+    /**
+     * return ordered (lowercase) list of all futures symbols available
+     */
+    List<String> findAllFuturesSymbols();
 }

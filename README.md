@@ -9,7 +9,7 @@
 gradle run
 gradle run --args repl
 gradle installDist
-gradle test --tests "ibhist.TimeSeriesRepositoryImplTest.test_selectiveRebuild"
+gradle run --args rebuild
 
 ```powershell
 param(
@@ -49,3 +49,8 @@ mongosh --eval "db.version()"
 
 ## remove file nul if accidentally created by a tool
 Remove-Item -LiteralPath "\\?\$($pwd.Path)\nul" -Force
+
+## Linux SDKMAN https://sdkman.io/
+use to manage JDK and Gradle versions
+
+sdk list java -tem

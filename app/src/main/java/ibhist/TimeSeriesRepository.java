@@ -60,6 +60,11 @@ public interface TimeSeriesRepository {
 
     List<TradeDateIndexEntry> queryContiguousRegions(String symbol, int gapMins);
 
+    /**
+     * Query the trade_date_index for a symbol, keeping only entries with at least minVolume.
+     */
+    List<TradeDateIndexEntry> queryTradeDates(String symbol, long minVolume);
+
     List<LocalDateTime> queryDayStartTimes(String symbol);
 
     List<TimeSeriesRepositoryImpl.DayVolume> queryDaysWithVolume(String symbol, double minVol);

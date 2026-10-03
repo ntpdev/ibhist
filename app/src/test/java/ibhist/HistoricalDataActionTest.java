@@ -80,7 +80,7 @@ class HistoricalDataActionTest {
         contract.symbol("ES");
         var action = new HistoricalDataAction(null, new AtomicInteger(), queue, contract, null, Duration.DAY_1, false, new MonitorManager(), new EventServiceImpl());
         var repo = new PriceHistoryRepositoryImpl();
-        var history = repo.load("esu").get();
+        var history = repo.load("esu5").get();
         var idx = history.indexEntry(LocalDate.of(2025, 6, 18));
         var open = history.getColumn("open");
         var high = history.getColumn("high");

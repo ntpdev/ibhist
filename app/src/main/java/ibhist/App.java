@@ -21,6 +21,8 @@ public class App {
      * - "hist": Historical data processing
      * - "day": ES day data processing
      * - "rt": Real-time data processing
+     * - "week": Latest week data processing
+     * - "rebuild": Rebuild MongoDB time series from CSV data
      * - "repl": Interactive REPL mode
      * - No argument or blank: defaults to "day"
      *
@@ -66,9 +68,12 @@ public class App {
             case "repl" -> {
                 injector.getInstance(Repl.class).run();
             }
+            case "rebuild" -> {
+                injector.getInstance(TimeSeriesProcess.class).rebuild();
+            }
             default -> {
                 log.error("Unknown command: '{}'.", command);
-                System.err.println("Usage: java ibhist.App [hist|day|rt|week|repl]");
+                System.err.println("Usage: java ibhist.App [hist|day|rt|week|repl|rebuild]");
                 System.exit(1);
             }
         }
