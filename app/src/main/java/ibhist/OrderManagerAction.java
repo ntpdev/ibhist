@@ -1,7 +1,8 @@
 package ibhist;
 
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 import com.ib.client.Contract;
-import com.ib.client.EClientSocket;
 import com.ib.client.Order;
 
 import java.math.BigDecimal;
@@ -10,14 +11,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class OrderManagerAction extends ActionBase {
     Map<Long, OrderInfo> orderMap = new HashMap<>();
 
-    public OrderManagerAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue) {
-        super(client, idGenerator, queue);
+    @AssistedInject
+    public OrderManagerAction(@Assisted ActionContext context) {
+        super(context.client(), context.idGenerator(), context.queue());
     }
 
     public OrderInfo onOpenOrder(Order order, Contract contract) {

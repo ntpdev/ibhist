@@ -1,5 +1,7 @@
 package ibhist;
 
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 import com.ib.client.*;
 
 import java.time.LocalDate;
@@ -8,8 +10,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Optional;
 
 import static ibhist.StringUtils.WS_SPLITTER;
 
@@ -20,7 +21,7 @@ import static ibhist.StringUtils.WS_SPLITTER;
 public class HistoricalDataAction extends ActionBase {
     //    private static final SimpleDateFormat FORMAT = new SimpleDateFormat("yyyyMMdd-HH:mm:ss");
     private final Contract contract;
-    private final LocalDate endDate;
+    private final Optional<LocalDate> endDate;
     private final Duration duration;
     private final boolean keepUpToDate;
     private final LocalDateTime updateUntil;
@@ -32,8 +33,11 @@ public class HistoricalDataAction extends ActionBase {
     private int currentBarCount = 99;
     private boolean init = false;
 
-    public HistoricalDataAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, LocalDate endDate, Duration duration, boolean keepUpToDate, MonitorManager monitorManager, EventService eventService) {
-        super(client, idGenerator, queue);
+    @AssistedInject
+    public HistoricalDataAction(@Assisted ActionContext context, @Assisted Contract contract, @Assisted Optional<LocalDate> endDate,
+                                @Assisted Duration duration, @Assisted boolean keepUpToDate,
+                                MonitorManager monitorManager, EventService eventService) {
+        super(context.client(), context.idGenerator(), context.queue());
         this.contract = contract;
         this.endDate = endDate;
         this.duration = duration;
@@ -54,8 +58,8 @@ public class HistoricalDataAction extends ActionBase {
     @Override
     public void makeRequest() {
         String upTo = "";
-        if (endDate != null) {
-            var d = endDate.atTime(22, 59);
+        if (endDate.isPresent()) {
+            var d = endDate.get().atTime(22, 59);
             upTo = d.format(DateTimeFormatter.ofPattern("yyyyMMdd HH:mm:ss"));
             upTo = upTo + " Europe/London"; // ask for local time. the option is to use exchange tz from contractDetails
         }

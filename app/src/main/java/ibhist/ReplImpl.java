@@ -26,16 +26,19 @@ public class ReplImpl implements Repl {
     private final TimeSeriesRepository timeSeriesRepo;
     private final PriceHistoryRepository priceHistoryRepo;
     private final SoundPlayer soundPlayer;
+    private final MonitorManager monitorManager;
     private PriceHistory history = null;
     private int default_day = -1;
 
 
     @Inject
-    public ReplImpl(IBConnector connector, TimeSeriesRepository timeSeriesRepo, PriceHistoryRepository priceHistoryRepo, SoundPlayer soundPlayer) {
+    public ReplImpl(IBConnector connector, TimeSeriesRepository timeSeriesRepo, PriceHistoryRepository priceHistoryRepo,
+                    SoundPlayer soundPlayer, MonitorManager monitorManager) {
         this.connector = connector;
         this.timeSeriesRepo = timeSeriesRepo;
         this.priceHistoryRepo = priceHistoryRepo;
         this.soundPlayer = soundPlayer;
+        this.monitorManager = monitorManager;
     }
 
     public void run() {
@@ -67,7 +70,6 @@ public class ReplImpl implements Repl {
                 del monitor - remove last monitor
                 enable sound / disable sound - toggle sound alerts[/]""");
         String line;
-        MonitorManager monitorManager = new MonitorManager();
         while ((line = reader.readLine()) != null) {
             var input = StringUtils.split(line);
             if (!input.isEmpty()) {
@@ -84,11 +86,11 @@ public class ReplImpl implements Repl {
                 } else if (noun.equals("tws")) { // conn disc
                     processTws(input);
                 } else if (noun.equals("es") | noun.equals("mes")) { // show stream end-stream
-                    requestHistoricData(cmd, noun, monitorManager);
+                    requestHistoricData(cmd, noun);
                 } else if (noun.equals("monitor")) {
-                    processMonitorCommand(input, monitorManager);
+                    processMonitorCommand(input);
                 } else if (cmd.equals("rt")) {
-                    processRt(input, monitorManager);
+                    processRt(input);
                 } else if (cmd.equals("select") && noun.equals("day")) {
                     processSelect(input);
                 } else if (cmd.equals("minmax") && history != null) {
@@ -130,7 +132,7 @@ public class ReplImpl implements Repl {
         }
     }
 
-    private void processMonitorCommand(List<String> input, MonitorManager monitorManager) {
+    private void processMonitorCommand(List<String> input) {
         if (input.getFirst().equals("list")) {
             print(monitorManager.toString());
         } else {
@@ -138,7 +140,7 @@ public class ReplImpl implements Repl {
         }
     }
 
-    private boolean requestHistoricData(String cmd, String symbol, MonitorManager monitorManager) {
+    private boolean requestHistoricData(String cmd, String symbol) {
         return switch (cmd) {
             case "limit" -> {
                 connector.buildOrder("MES");
@@ -155,7 +157,7 @@ public class ReplImpl implements Repl {
                 yield true;
             }
             case "stream" -> {
-                connector.requestHistoricalData(symbol, IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true, monitorManager);
+                connector.requestHistoricalData(symbol, IBConnectorImpl.CONTRACT_MONTH, Duration.DAY_1, true);
                 yield true;
             }
             case "end-stream" -> {
@@ -182,11 +184,11 @@ public class ReplImpl implements Repl {
     }
 
     // commands rt / rt cancel
-    private boolean processRt(List<String> input, MonitorManager monitorManager) {
+    private boolean processRt(List<String> input) {
         if (input.getFirst().equalsIgnoreCase("rt")) {
             if (input.size() == 1) {
                 connector.connect();
-                connector.requestRealTimeBars("ES", IBConnectorImpl.CONTRACT_MONTH, monitorManager);
+                connector.requestRealTimeBars("ES", IBConnectorImpl.CONTRACT_MONTH);
                 print("[blue]requesting realtime bars[/]");
             } else {
                 connector.cancelRealtime();

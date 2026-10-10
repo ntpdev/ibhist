@@ -19,11 +19,11 @@ public interface IBConnector extends ActionProvider {
 
     HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration);
 
-    HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate, MonitorManager manager);
+    HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate);
 
     HistoricalDataAction waitForHistoricalData();
 
-    RealTimeBarsAction requestRealTimeBars(String symbol, String contractMonth, MonitorManager manager);
+    RealTimeBarsAction requestRealTimeBars(String symbol, String contractMonth);
 
     boolean cancelRealtime();
 

@@ -35,15 +35,18 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     private final Provider<TimeSeriesRepository> timeSeriesRepo;
     private final Provider<PriceHistoryRepository> priceHistoryRepo;
     private final ContractFactory contractFactory;
-    private final EventService eventService;
+    private final ActionFactory actionFactory;
+    private final EWrapperFactory eWrapperFactory;
 
 
     @Inject
-    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepo, Provider<PriceHistoryRepository> priceHistoryRepo, ContractFactory contractFactory, EventService eventService) {
+    public IBConnectorImpl(Provider<TimeSeriesRepository> timeSeriesRepo, Provider<PriceHistoryRepository> priceHistoryRepo,
+                           ContractFactory contractFactory, ActionFactory actionFactory, EWrapperFactory eWrapperFactory) {
         this.timeSeriesRepo = timeSeriesRepo;
         this.priceHistoryRepo = priceHistoryRepo;
         this.contractFactory = contractFactory;
-        this.eventService = eventService;
+        this.actionFactory = actionFactory;
+        this.eWrapperFactory = eWrapperFactory;
     }
 
     @Override
@@ -55,7 +58,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
                     case ES_DAY -> saveHistoricalData("ES", CONTRACT_MONTH, Duration.DAY_5);
                     case LATEST_WEEK -> saveLatestData(Duration.DAY_10);
                     case HISTORICAL -> saveHistoricalDataRange("NQ", "202609", LocalDate.of(2026, 9, 17), 4);
-                    case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH, null); // unused
+                    case REALTIME -> requestRealTimeBars("ES", CONTRACT_MONTH); // unused
                 }
             } finally {
                 disconnect();
@@ -66,17 +69,17 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     @Override
     public boolean connect() {
-        EWrapperImpl wrapper = new EWrapperImpl(this);
+        EWrapperImpl wrapper = eWrapperFactory.create(this);
         m_client = wrapper.getClient();
         m_signal = wrapper.getSignal();
 
         m_client.eConnect("127.0.0.1", 7496, 0);
         reader = new EReader(m_client, m_signal);
 
-        var nextOrder = new NextOrderIdAction(m_client, id, queue);
+        var nextOrder = actionFactory.nextOrderId(actionContext());
         actions.put(nextOrder.getRequestId(), nextOrder); // this is a dummy action that does not need to be sent
 
-        var orderManager = new OrderManagerAction(m_client, id, queue);
+        var orderManager = actionFactory.orderManager(actionContext());
         actions.put(orderManager.getRequestId(), orderManager); // this is a dummy action that does not need to be sent)
 
         reader.start();
@@ -118,6 +121,13 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         actions.put(action.getRequestId(), action);
         action.makeRequest();
         return action;
+    }
+
+    /**
+     * transport of the current connection - supplied to each action as it is created
+     */
+    private ActionContext actionContext() {
+        return new ActionContext(m_client, id, queue);
     }
 
     @Override
@@ -176,9 +186,9 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     }
 
     @Override
-    public HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate, MonitorManager manager) {
+    public HistoricalDataAction requestHistoricalData(String symbol, String contractMonth, Duration duration, boolean keepUpToDate) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        return requestHistoricalData(contractDetails.contract(), duration, keepUpToDate, manager);
+        return requestHistoricalData(contractDetails.contract(), Optional.empty(), duration, keepUpToDate);
     }
 
     @Override
@@ -194,7 +204,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     @Override
     public HistoricalDataAction getHistoricalData(String symbol, String contractMonth, Duration duration) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        var sent = requestHistoricalData(contractDetails.contract(), duration, false, null);
+        var sent = requestHistoricalData(contractDetails.contract(), Optional.empty(), duration, false);
         return takeFromQueue(sent);
     }
 
@@ -213,7 +223,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
     private void getHistoricalIndexData(String symbol, Duration duration) {
         var contract = contractFactory.newIndex(symbol);
-        var sent = requestHistoricalData(contract, duration, false, null);
+        var sent = requestHistoricalData(contract, Optional.empty(), duration, false);
         processHistoricalIndexData(takeFromQueue(sent));
     }
 
@@ -221,14 +231,14 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
      * non blocking call - requests streaming data
      */
     @Override
-    public RealTimeBarsAction requestRealTimeBars(String symbol, String contractMonth, MonitorManager manager) {
+    public RealTimeBarsAction requestRealTimeBars(String symbol, String contractMonth) {
         var contractDetails = getContractDetails(contractFactory.newFutureContract(symbol, contractMonth));
-        return requestRealTimeBars(contractDetails.contract(), manager);
+        return requestRealTimeBars(contractDetails.contract());
     }
 
-    private RealTimeBarsAction requestRealTimeBars(Contract contract, MonitorManager manager) {
+    private RealTimeBarsAction requestRealTimeBars(Contract contract) {
         log.info("requestRealTimeBars");
-        var action = new RealTimeBarsAction(m_client, id, queue, contract, manager, 120);
+        var action = actionFactory.realTimeBars(actionContext(), contract, 120);
         sendRequest(action);
         return action;
     }
@@ -238,7 +248,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
     }
 
     private ContractDetailsAction requestContractDetails(Contract contract) {
-        var action = new ContractDetailsAction(m_client, id, queue, contract);
+        var action = actionFactory.contractDetails(actionContext(), contract);
         sendRequest(action);
         return action;
     }
@@ -285,9 +295,8 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
         return dates;
     }
 
-    private HistoricalDataAction requestHistoricalData(Contract contract, Duration duration, boolean keepUpToDate, MonitorManager manager) {
-        var action = new HistoricalDataAction(m_client, id, queue, contract, null, duration, keepUpToDate, manager, eventService);
-//        var action = new HistoricalDataAction(m_client, id, queue, contract, LocalDate.of(2025, 11, 9), bars, keepUpToDate, manager);
+    private HistoricalDataAction requestHistoricalData(Contract contract, Optional<LocalDate> endDate, Duration duration, boolean keepUpToDate) {
+        var action = actionFactory.historicalData(actionContext(), contract, endDate, duration, keepUpToDate);
         sendRequest(action);
         return action;
     }
@@ -326,10 +335,7 @@ public class IBConnectorImpl implements IBConnector, ActionProvider {
 
         for (LocalDate periodEnd : periodEndDates) {
             log.info("Requesting timeseries ending date {}", periodEnd);
-            var action = new HistoricalDataAction(
-                    m_client, id, queue, contract, periodEnd,
-                    Duration.DAY_10, false, null, eventService
-            );
+            var action = actionFactory.historicalData(actionContext(), contract, Optional.of(periodEnd), Duration.DAY_10, false);
             sendRequest(action);
             processHistoricalData(takeFromQueue(action), true);
         }

@@ -1,13 +1,12 @@
 package ibhist;
 
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 import com.ib.client.Contract;
-import com.ib.client.EClientSocket;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoublePredicate;
 
 public class RealTimeBarsAction extends ActionBase {
@@ -20,8 +19,10 @@ public class RealTimeBarsAction extends ActionBase {
     private volatile boolean cancelSent = false;
     private boolean fInit = false;
 
-    public RealTimeBarsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract, MonitorManager monitorManager, int maxBars) {
-        super(client, idGenerator, queue);
+    @AssistedInject
+    public RealTimeBarsAction(@Assisted ActionContext context, @Assisted Contract contract, @Assisted int maxBars,
+                              MonitorManager monitorManager) {
+        super(context.client(), context.idGenerator(), context.queue());
         this.contract = contract;
         this.monitorManager = monitorManager;
         this.maxBars = maxBars;

@@ -1,13 +1,11 @@
 package ibhist;
 
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
-import com.ib.client.EClientSocket;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ContractDetailsAction extends ActionBase {
     private static final Logger log = LogManager.getLogger(ContractDetailsAction.class.getSimpleName());
@@ -15,8 +13,9 @@ public class ContractDetailsAction extends ActionBase {
     private Contract contract;
     private ContractDetails contractDetails;
 
-    public ContractDetailsAction(EClientSocket client, AtomicInteger idGenerator, BlockingQueue<Action> queue, Contract contract) {
-        super(client, idGenerator, queue);
+    @AssistedInject
+    public ContractDetailsAction(@Assisted ActionContext context, @Assisted Contract contract) {
+        super(context.client(), context.idGenerator(), context.queue());
         this.contract = contract;
     }
 

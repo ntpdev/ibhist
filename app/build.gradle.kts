@@ -33,6 +33,9 @@ dependencies {
     implementation("com.google.guava:guava:33.7.1-jre")
     // https://mvnrepository.com/artifact/com.google.inject/guice
     implementation("com.google.inject:guice:7.0.0")
+    // assisted injection (@AssistedInject / AssistedFactory)
+    // https://mvnrepository.com/artifact/com.google.inject.extensions/guice-assistedinject
+    implementation("com.google.inject.extensions:guice-assistedinject:7.0.0")
     // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
     implementation("org.apache.logging.log4j:log4j-core:2.26.1")
     // https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync
